@@ -35,6 +35,7 @@ stages:
 Deliver a macOS beta that applies workspace Safehouse policies to native Paseo agents and supports dependable installation, discovery, launch, and resume.
 Each task produces or validates plugin code, tests, user-facing configuration, or a distributable release artifact.
 The release-review findings in `docs/implementation.md` seed the backlog.
+Beta acceptance targets clean installations. Migration from existing installations is outside this workflow.
 
 The development agent runs outside Safehouse and controls an isolated test daemon.
 Test agents run inside Safehouse. Development must preserve main-daemon agents, configuration, and existing installation paths.

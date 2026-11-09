@@ -9,7 +9,7 @@ The commissioned development workflow is `docs/dev/README.md`. Mutable task stat
 - Run sandboxed test agents on a separate Paseo daemon under this checkout's ignored `.local/daemon` directory.
 - Keep the main daemon at `~/.paseo`, its provider entries, and existing agents unchanged during development.
 - The previous installed checkouts remain at `~/git/spacedock-research/paseo-safehouse-direct` and `~/git/spacedock-research/paseo-safehouse`.
-- Do not install this renamed plugin over the existing providers until the migration task passes validation and CL approves rollout.
+- Develop and validate on clean isolated daemons. Installation migration is outside the development scope.
 - Use Paseo's public plugin APIs. Do not patch Paseo core as part of this workflow.
 - Sandbox tests may use disposable fixtures. Do not broaden a real workspace policy to make a test pass.
 
