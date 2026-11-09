@@ -63,6 +63,24 @@ await setup({config:{get:async()=>({config:JSON.parse(await fs.readFile(file,'ut
   await assert.rejects(fs.stat(path.join(f.root, "setup-pending.json")), { code: "ENOENT" });
 });
 
+test("setup publishes complete exact files before the public patch", { skip: process.platform !== "darwin" }, async t => {
+  const f = await fixture(t), apply = f.host.config.patch;
+  let publications = 0;
+  f.host.config.patch = async patch => {
+    const pending = JSON.parse(await fs.readFile(path.join(f.root, "setup-pending.json"), "utf8"));
+    for (const file of pending.files)
+      assert.equal(await fs.readFile(file.file, "utf8"), file.text, file.file);
+    assert.ok(pending.files.some((file: any) => file.file === pending.installation.guard));
+    for (const entry of Object.values(patch.providers ?? {}) as any[])
+      assert.ok(pending.files.some((file: any) => file.file === entry.command[1]));
+    publications++;
+    return apply(patch);
+  };
+  // Unexpected callback errors must fail the test, not count as an injected fault.
+  await setup(f.host);
+  assert.equal(publications, 1);
+});
+
 for (const boundary of ["patch", "files", "commit", "cleanup"]) {
   test(`setup retries ${boundary} failure with complete immutable files`, { skip: process.platform !== "darwin" }, async (t) => {
     const f = await fixture(t);
@@ -77,12 +95,15 @@ for (const boundary of ["patch", "files", "commit", "cleanup"]) {
     let unblock = async () => {};
     const apply = f.host.config.patch;
     if (boundary === "files") {
+      const before = await f.get(), patchCount = f.patches();
       // Force a new launcher generation and obstruct its destination directory.
       const extension = path.join(f.dir, "extension.ts"); await fs.writeFile(extension, "");
       await fs.rename(path.join(f.root, "launchers"), path.join(f.root, "retained"));
       await fs.writeFile(path.join(f.root, "launchers"), "blocked");
       unblock = async () => { await fs.rm(path.join(f.root, "launchers")); await fs.rename(path.join(f.root, "retained"), path.join(f.root, "launchers")); };
       await assert.rejects(setup(f.host, { piCatalogExtensions: [extension] }));
+      assert.equal(f.patches(), patchCount);
+      assert.deepEqual(await f.get(), before);
     } else {
       f.host.config.patch = async patch => {
         for (const entry of Object.values(patch.providers ?? {}) as any[]) {
@@ -107,7 +128,8 @@ for (const boundary of ["patch", "files", "commit", "cleanup"]) {
         return result;
       };
       const extension = path.join(f.dir, "extension.ts"); await fs.writeFile(extension, "");
-      await assert.rejects(setup(f.host, { piCatalogExtensions: [extension] }));
+      await assert.rejects(setup(f.host, { piCatalogExtensions: [extension] }),
+        boundary === "patch" ? /before apply/ : { code: boundary === "cleanup" ? "ERR_FS_EISDIR" : "EISDIR" });
     }
     await unblock(); f.host.config.patch = apply;
     assert.deepEqual(await Promise.all(retained.map(file => fs.readFile(file, "utf8"))), bytes);
