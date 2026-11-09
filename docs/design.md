@@ -128,14 +128,16 @@ The bootstrap changes its directory to `/` and starts Safehouse with an explicit
 Discovery retains Safehouse’s baseline harness access and fixed protections for plugin state and daemon endpoints.
 It receives no workspace grants or workspace custom profiles.
 
-Current Pi discovery disables automatic extension loading. This is a compatibility gap to remove, not a required user configuration workflow. An explicit `piCatalogExtensions` list can load extensions that register models.
+The explicit Pi variant’s restricted discovery disables automatic extension loading. Its cached catalog can differ from the ordinary picker. An explicit `piCatalogExtensions` list can load extensions that register models.
 The `safehouse.setup` RPC accepts absolute extension paths and persists them in the installation record.
 Later setup calls preserve the list unless they supply a replacement. An empty array clears it.
 These paths do not grant filesystem access. Extensions and dependencies must remain readable under the catalog sandbox.
 Model providers from omitted extensions are absent from the catalog.
 Normal Pi sessions retain their configured extensions and workspace policy.
-The beta must use native harness configuration without harness-specific controls in the Safehouse panel.
-Normal Pi extension discovery within the catalog sandbox still requires runtime proof.
+Use the ordinary Pi picker to select models from native configuration without harness-specific Safehouse controls.
+An isolated 0.15.3 probe selected a current Lunaroute model and completed sandboxed tool calls with an empty extension-path list.
+Native session extensions can import files outside their configuration directory. Those dependencies require explicit workspace-policy access.
+A denied import can appear as a missing-module error. Safehouse does not add grants automatically.
 
 The catalog marker selects a restricted launch mode, not a protocol authorization check.
 If a caller uses that marker for a conversation, the process retains catalog restrictions and receives no workspace access.

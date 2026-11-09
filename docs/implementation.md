@@ -118,7 +118,9 @@ Passing smoke tests establish specific behaviors, not the complete security boun
    Repeating setup rejected those variants as unrelated configuration. Add recoverable installation state and serialize concurrent setup operations.
 5. **Medium: Pi catalog discovery suppresses native extensions.** The bootstrap passes `--no-extensions` and requires separate extension paths.
    Without that configuration, the catalog can omit models available to normal Pi sessions. The panel exposes no control for this list.
-   Restore native configuration discovery within the catalog sandbox. Do not add harness-specific panel settings.
+   Ordinary-provider discovery already supplies current native models before routing.
+   On 0.15.3, an isolated Pi launch completed real tools with no catalog extension list after its fixture policy authorized an extension dependency.
+   Restricted variant discovery still differs; removing suppression fails on ungranted imports. Hold catalog edits and document this limit.
 
 Publication preparation also remains incomplete. The package is private, has no repository metadata, and the repository has no remote.
 The manifest has no interface image. The public listing must describe data access, provider traffic, requirements, and limitations.

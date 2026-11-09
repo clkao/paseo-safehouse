@@ -33,8 +33,9 @@ This disables Codex’s inner sandbox and approval prompts.
 Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
 
 Model discovery runs in a separate Safehouse process with no workspace grants.
-Current Pi discovery loads only explicitly configured provider extensions. Native extension discovery is an open beta compatibility gap.
-The beta will use native harness configuration without harness-specific panel settings.
+Use the ordinary Pi provider in Paseo’s picker. It loads native model configuration before Safehouse routing.
+Native extensions also run inside the session sandbox. Their dependencies must be readable under the workspace policy.
+The explicit Safehouse variant’s restricted catalog can differ from the ordinary picker. No harness-specific panel settings are required.
 The [design](docs/design.md#provider-discovery) describes catalog extension configuration and its limits.
 
 ## Development
