@@ -158,7 +158,8 @@ Existing main-daemon agents were not reloaded. This historical catalog evidence 
 4. Reproduce policy symlink, ancestor-rename and whitespace risks. Correct confirmed boundary failures with independent sandbox evidence.
 5. Complete the existing profile, capability, provider lifecycle and rendered UI acceptance cases.
 6. Probe cwd routing, creation-hook timeout behavior and daemon execution of agent-written repository configuration.
-7. Align the manifest minimum with Paseo 0.15.3. Rebuild and check the exact final artifact after corrections.
+7. Set the manifest requirement to `>=0.15.0`, without a minor-series upper bound. Keep Paseo 0.15.3 as the recorded test version.
+   Rebuild and check the exact final artifact after corrections.
 
 The mechanism for a confirmed failure requires review before implementation.
 A hypothesis does not establish a release blocker. A missing required acceptance result still prevents a release claim.
