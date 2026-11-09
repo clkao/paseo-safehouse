@@ -99,6 +99,26 @@ The variant’s default environment selects restricted catalog discovery.
 Prepared launches require an existing snapshot directly beneath the plugin’s snapshot directory.
 Missing or malformed environment values fail before the harness starts.
 
+### Provider setup recovery
+
+Setup stores a protected `setup-pending.json` record before it changes provider configuration.
+The record contains the intended installation, previous target entries, native source configuration, and complete guard and launcher bytes.
+Setup writes immutable guard and launcher files before it publishes their commands.
+It reads provider configuration again before it commits `installation.json` and removes the pending record.
+A lost response or process interruption leaves enough evidence for the next setup call to complete the same plan.
+Old guard and launcher generations remain available to existing sessions.
+
+Recovery rejects changed targets, changed native sources, malformed state, and a changed daemon identity.
+It preserves the pending record on failure and never adopts an unrecorded provider entry.
+Calls share a queue for each daemon home within one process.
+The public API has no compare-and-swap operation, so external writers can race with setup.
+Exact readback detects resulting conflicts, but cannot exclude another daemon or an external writer.
+
+Paseo recursively merges provider objects and retains omitted nested fields.
+A refresh that requires nested-field deletion fails before any file or configuration write.
+The previous installation remains intact.
+Atomic file replacement covers process interruption, but does not guarantee recovery from power loss or filesystem corruption.
+
 ### Lifecycle hooks
 
 The beta targets Paseo 0.15.3 and Safehouse 0.12.0. Earlier evidence used Paseo 0.15.2.

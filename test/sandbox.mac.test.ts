@@ -53,6 +53,23 @@ test(
         host: "claude",
       }),
     );
+    const protectedFiles = ["setup-pending.json", "installation.json", "guard-retained.sb", "launcher-retained.sh"].map(name => path.join(root, name));
+    for (const file of protectedFiles) await fs.writeFile(file, "retained bytes");
+    protectedFiles.push(guard, bootstrap);
+    const protectedBytes = await Promise.all(protectedFiles.map(file => fs.readFile(file, "utf8")));
+    const protectedProbe = `const fs=require('node:fs');console.log(JSON.stringify(${JSON.stringify(protectedFiles)}.map(file=>{try{fs.writeFileSync(file,'overwritten');return 'allowed'}catch(e){return e.code}})));`;
+    const protectedResult = JSON.parse((await run("/bin/sh", [bootstrap, "-e", protectedProbe], {
+      cwd, env: policyEnvironment(process.env, snapshot), timeout: 45000,
+    })).stdout);
+    assert.deepEqual(protectedResult, protectedFiles.map(() => "EPERM"));
+    assert.deepEqual(await Promise.all(protectedFiles.map(file => fs.readFile(file, "utf8"))), protectedBytes);
+    const directResult = JSON.parse((await run(process.execPath, ["-e", protectedProbe], { cwd })).stdout);
+    assert.deepEqual(directResult, protectedFiles.map(() => "allowed"));
+    for (let i = 0; i < protectedFiles.length; i++) {
+      assert.equal(await fs.readFile(protectedFiles[i], "utf8"), "overwritten");
+      await fs.writeFile(protectedFiles[i], protectedBytes[i]);
+    }
+    t.diagnostic("Pending intent, installation, current and retained guard/launcher writes: EPERM with unchanged bytes; direct control overwrote every file.");
     const script = path.join(cwd, "probe.cjs");
     await fs.writeFile(
       script,

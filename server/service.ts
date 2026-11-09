@@ -8,10 +8,10 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 import { renderBootstrap } from "./launch";
+import { finishPending, savePending, serializeSetup, validateInstallation } from "./setup";
 import { configuredProvider, launchError, type ProviderConfig } from "./providers";
 import {
   atomicJson,
-  atomicWrite,
   capabilities,
   canonicalDirectory,
   findExecutable,
@@ -40,7 +40,7 @@ export const daemonHome = () =>
 export const stateRoot = () => path.join(daemonHome(), "safehouse");
 type Variant = ProviderConfig;
 type Source = { provider: string; base: string; source: ProviderConfig | null; baseSource: ProviderConfig | null };
-type Installation = {
+export type Installation = {
   binary: string;
   features: string[];
   version: string;
@@ -88,8 +88,8 @@ export async function workspaceCwd(paseo: Paseo, id: string) {
     throw new Error("The workspace directory is unavailable.");
   return canonicalDirectory(workspace.workspaceDirectory);
 }
-async function daemonDetails() {
-  const home = await canonicalDirectory(daemonHome());
+async function daemonDetails(capturedHome = daemonHome()) {
+  const home = await canonicalDirectory(capturedHome);
   const config = await readJson<{
     daemon?: { listen?: string };
     plugins?: Record<string, { path?: string }>;
@@ -119,12 +119,23 @@ export async function setup(
   options: { piCatalogExtensions?: string[] } = {},
 ) {
   macOnly();
+  const home = await canonicalDirectory(daemonHome());
+  const root = path.join(home, "safehouse");
+  return serializeSetup(root, () => setupLocked(paseo, options, home, root));
+}
+async function setupLocked(
+  paseo: Paseo, options: { piCatalogExtensions?: string[] }, home: string, root: string,
+) {
+  const details = await daemonDetails(home);
+  const prior = await readJson<Installation>(path.join(root, "installation.json"));
+  if (prior !== null) validateInstallation(prior);
+  await finishPending(root, paseo, details);
+  const stored = await readJson<Installation>(path.join(root, "installation.json"));
+  const old = stored === null ? null : validateInstallation(stored);
   const binary = await findExecutable("safehouse");
   if (!binary)
     throw new Error("Install agent-safehouse on the daemon Mac before setup.");
   const caps = await capabilities(binary);
-  const details = await daemonDetails();
-  const old = await installation();
   const piCatalogExtensions: string[] = [];
   for (const extension of options.piCatalogExtensions ??
     old?.piCatalogExtensions ??
@@ -133,13 +144,13 @@ export async function setup(
       throw new Error("Pi catalog extensions require absolute paths.");
     piCatalogExtensions.push(await fs.realpath(extension));
   }
-  const root = stateRoot();
-  const guard = path.join(root, "guard.sb");
+
   const current = (await paseo.config.get()).config.providers ?? {};
   const entries: Record<string, Variant> = { ...old?.entries };
   const sources: Record<string, Source> = { ...old?.sources };
   const unavailable: Record<string, string> = {};
   const bootstraps: { file: string; text: string }[] = [];
+  const wrappers: { host: string; base: string; config: ProviderConfig; command: string[] }[] = [];
   const protectedPaths = [
     details.source,
     binary,
@@ -160,31 +171,10 @@ export async function setup(
         `Provider ${id} belongs to another configuration. It was not changed.`,
       );
     protectedPaths.push(executable, await fs.realpath(executable));
-    const text = renderBootstrap({
-      root,
-      binary,
-      guard,
-      command,
-      host: base,
-      piCatalogExtensions,
-    });
-    const file = path.join(
-      root,
-      "launchers",
-      `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`,
-    );
-    bootstraps.push({ file, text });
-    entries[id] = {
-      ...config,
-      extends: base,
-      label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
-      command: ["/bin/sh", file],
-      env: policyEnvironment(config.env ?? {}, path.join(root, "catalog")),
-      paseoTools: { ...config.paseoTools, enabled: false },
-    };
+    wrappers.push({ host, base, config, command });
     sources[id] = { provider: host, base, source: current[host] ?? null, baseSource: current[base] ?? null };
   }
-  if (!Object.keys(entries).length)
+  if (!wrappers.length && !Object.keys(entries).length)
     throw new Error(
       "No configured harness can be wrapped. Check command arrays and executable availability.",
     );
@@ -193,26 +183,26 @@ export async function setup(
     path.join(mainHome, "paseo.pid"),
   );
   const mainPort = Number(mainPid?.listen?.split(":").at(-1));
-  await atomicWrite(
-    guard,
-    guardProfile([root, details.home, mainHome], protectedPaths, [
-      details.port,
-      ...(mainPort ? [mainPort] : []),
-    ]),
-  );
-  for (const bootstrap of bootstraps)
-    await atomicWrite(bootstrap.file, bootstrap.text);
-  await paseo.config.patch({ providers: entries });
-  await atomicJson(path.join(root, "installation.json"), {
-    binary,
-    ...caps,
-    ...details,
-    entries,
-    sources,
-    unavailable,
-    guard,
-    piCatalogExtensions,
-  } satisfies Installation);
+  const guardText = guardProfile([root, details.home, mainHome], protectedPaths, [details.port, ...(mainPort ? [mainPort] : [])]);
+  const guard = path.join(root, `guard-${hash(guardText).slice(0, 16)}.sb`);
+  for (const { host, base, config, command } of wrappers) {
+    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions });
+    const file = path.join(root, "launchers", `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`);
+    bootstraps.push({ file, text });
+    entries[variant(host)] = { ...config, extends: base,
+      label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
+      command: ["/bin/sh", file], env: policyEnvironment(config.env ?? {}, path.join(root, "catalog")),
+      paseoTools: { ...config.paseoTools, enabled: false } };
+  }
+  for (const id of Object.keys(entries))
+    if (!isDeepStrictEqual(current[id] ?? null, old?.entries[id] ?? null))
+      throw new Error(`Provider ${id} belongs to another configuration. It was not changed.`);
+  await savePending(root, {
+    installation: { binary, ...caps, ...details, entries, sources, unavailable, guard, piCatalogExtensions },
+    previous: Object.fromEntries(Object.keys(entries).map(id => [id, current[id] ?? null])),
+    files: [{ file: guard, text: guardText }, ...bootstraps],
+  });
+  await finishPending(root, paseo, details);
   return { providers: Object.keys(entries) };
 }
 async function ready(paseo: Paseo, provider?: string) {

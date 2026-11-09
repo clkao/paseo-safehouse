@@ -30,7 +30,7 @@ async function fixture(t: any) {
     await fs.rm(dir, { recursive: true, force: true });
   });
   const configFile = path.join(dir, "providers.json");
-  const initial = { providers: { pi: { env: { USER_OPTION: "kept" }, models: [{ id: "native" }] }, peer: { extends: "pi", command: ["peer"] } }, plugins: { peer: { enabled: true } } };
+  const initial = { providers: { pi: { env: { USER_OPTION: "kept" }, models: [{ id: "native", label: "Native" }] }, peer: { label: "Peer", extends: "pi", command: ["peer"] } }, plugins: { peer: { enabled: true } } };
   await fs.writeFile(configFile, JSON.stringify(initial));
   let patches = 0;
   const get = async () => JSON.parse(await fs.readFile(configFile, "utf8"));
@@ -70,6 +70,10 @@ for (const boundary of ["patch", "files", "commit", "cleanup"]) {
     const old = JSON.parse(await fs.readFile(path.join(f.root, "installation.json"), "utf8"));
     const retained = [old.guard, ...Object.values(old.entries).map((e: any) => e.command[1])];
     const bytes = await Promise.all(retained.map(file => fs.readFile(file, "utf8")));
+    const nextExecutable = path.join(f.bin, "pi-next");
+    await fs.writeFile(nextExecutable, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    const nativeConfig = await f.get(); nativeConfig.providers.pi.command = [nextExecutable];
+    await fs.writeFile(f.configFile, JSON.stringify(nativeConfig));
     let unblock = async () => {};
     const apply = f.host.config.patch;
     if (boundary === "files") {
@@ -88,7 +92,7 @@ for (const boundary of ["patch", "files", "commit", "cleanup"]) {
           await fs.access(pending.installation.guard);
         }
         if (boundary === "patch") throw new Error("before apply");
-        await apply(patch);
+        const result = await apply(patch);
         if (boundary === "commit") {
           await fs.rename(path.join(f.root, "installation.json"), path.join(f.root, "saved.json"));
           await fs.mkdir(path.join(f.root, "installation.json"));
@@ -100,6 +104,7 @@ for (const boundary of ["patch", "files", "commit", "cleanup"]) {
           await fs.rm(pendingPath); await fs.mkdir(pendingPath);
           unblock = async () => { await fs.rmdir(pendingPath); await fs.writeFile(pendingPath, pendingBytes); };
         }
+        return result;
       };
       const extension = path.join(f.dir, "extension.ts"); await fs.writeFile(extension, "");
       await assert.rejects(setup(f.host, { piCatalogExtensions: [extension] }));
@@ -122,7 +127,7 @@ test("setup queue recovers a rejected predecessor without overlapping patches", 
   let active = 0, peak = 0, calls = 0;
   f.host.config.patch = async patch => {
     active++; peak = Math.max(peak, active);
-    try { if (++calls === 1) { entered(); await blocked; throw new Error("first failed"); } await apply(patch); }
+    try { if (++calls === 1) { entered(); await blocked; throw new Error("first failed"); } return await apply(patch); }
     finally { active--; }
   };
   const first = assert.rejects(setup(f.host), /first failed/);
@@ -132,4 +137,79 @@ test("setup queue recovers a rejected predecessor without overlapping patches", 
   release(); await first; await second;
   assert.equal(peak, 1);
   assert.ok(await fs.stat(path.join(f.root, "installation.json")));
+});
+
+for (const conflict of ["target", "source", "identity", "malformed", "foreign", "readback", "nested deletion"]) {
+  test(`setup refuses ${conflict} without losing protected evidence`, { skip: process.platform !== "darwin" }, async t => {
+    const f = await fixture(t), apply = f.host.config.patch;
+    const pendingPath = path.join(f.root, "setup-pending.json");
+    if (conflict === "nested deletion" || conflict === "foreign") {
+      await setup(f.host);
+      if (conflict === "foreign") await fs.rm(path.join(f.root, "installation.json"));
+      else {
+        const config = await f.get(); delete config.providers.pi.env.USER_OPTION;
+        await fs.writeFile(f.configFile, JSON.stringify(config));
+      }
+    } else {
+      f.host.config.patch = async patch => { await apply(patch); throw new Error("lost response"); };
+      await assert.rejects(setup(f.host), /lost response/);
+      if (conflict === "target" || conflict === "source") {
+        const config = await f.get(); config.providers[conflict === "target" ? "pi-safehouse" : "pi"].env.USER_OPTION = "edited";
+        await fs.writeFile(f.configFile, JSON.stringify(config));
+      }
+      if (conflict === "identity") {
+        const configPath = path.join(f.home, "config.json"), config = JSON.parse(await fs.readFile(configPath, "utf8"));
+        config.daemon.listen = "127.0.0.1:41790"; await fs.writeFile(configPath, JSON.stringify(config));
+      }
+      if (conflict === "malformed") await fs.writeFile(pendingPath, '{"installation":{}}');
+    }
+    const before = await f.get(), count = f.patches();
+    const pending = await fs.readFile(pendingPath, "utf8").catch(() => null);
+    f.host.config.patch = apply;
+    if (conflict === "readback") {
+      // Exact planned targets require no patch; a changed final read must still prevent commit.
+      const get = f.host.config.get; let reads = 0;
+      f.host.config.get = async (...args) => { const result = await get(...args); if (++reads === 3) result.config.providers["pi-safehouse"].label = "unexpected"; return result; };
+    }
+    await assert.rejects(setup(f.host), /conflict|source changed|identity changed|Invalid setup-pending|another configuration|nested field removal/);
+    assert.equal(f.patches(), count);
+    assert.deepEqual(await f.get(), before);
+    assert.equal(await fs.readFile(pendingPath, "utf8").catch(() => null), pending);
+  });
+}
+
+test("setup queues different captured daemon roots independently", { skip: process.platform !== "darwin" }, async t => {
+  const a = await fixture(t);
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; }), blocked = new Promise<void>(resolve => { release = resolve; });
+  const apply = a.host.config.patch;
+  a.host.config.patch = async patch => { entered(); await blocked; return apply(patch); };
+  const first = setup(a.host); await started;
+  const b = await fixture(t);
+  try {
+    await setup(b.host);
+    await assert.rejects(fs.stat(path.join(a.root, "installation.json")), { code: "ENOENT" });
+    assert.ok(await fs.stat(path.join(b.root, "installation.json")));
+  } finally { release(); }
+  await first;
+  const saved = JSON.parse(await fs.readFile(path.join(a.root, "installation.json"), "utf8"));
+  assert.equal(saved.home, a.home);
+});
+
+test("invalid committed state and pending persistence failure prevent publication", { skip: process.platform !== "darwin" }, async t => {
+  const f = await fixture(t);
+  await fs.mkdir(f.root);
+  const installation = path.join(f.root, "installation.json"), pending = path.join(f.root, "setup-pending.json");
+  await fs.writeFile(installation, "{}");
+  await assert.rejects(setup(f.host), /Invalid installation.json/);
+  assert.equal(f.patches(), 0);
+  await fs.rm(installation);
+  await fs.mkdir(pending);
+  await assert.rejects(setup(f.host));
+  assert.equal(f.patches(), 0);
+  assert.deepEqual(await f.get(), f.initial);
+  assert.deepEqual(await fs.readdir(f.root), ["setup-pending.json"]);
+  await fs.rmdir(pending);
+  await setup(f.host);
+  assert.equal(f.patches(), 1);
 });
