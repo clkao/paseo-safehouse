@@ -48,7 +48,7 @@ export default function contribute(client: PluginClientContext) {
           headers.set(
             id,
             client.addHeaderButton({
-              id: "safehouse-" + id,
+              id: "safehouse-status",
               workspaceId: id,
               button: {
                 title: "Checking Safehouse",
@@ -74,7 +74,7 @@ export default function contribute(client: PluginClientContext) {
               pills.set(
                 agent.id,
                 client.addComposerPill({
-                  id: "safehouse-" + agent.id,
+                  id: "safehouse-status",
                   workspaceId: id,
                   agentId: agent.id,
                   button: {
