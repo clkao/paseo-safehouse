@@ -161,6 +161,18 @@ Fixed final restrictions protect plugin state, snapshots, plugin code, and the d
 Changing a source file after preparation cannot change the prepared snapshot.
 The opening hook resolves the source again before preparing the snapshot. Later source changes affect only subsequent processes.
 
+Resolution follows each workspace, grant, and profile path one component at a time.
+It records every symbolic link on the way, every link target, and every canonical ancestor directory.
+The snapshot denies the managed process writes to each recorded directory entry, so the process cannot rename, replace, or retarget a component that decides where the next resolution leads.
+Each denial names one entry. Files and directories beneath a granted directory stay writable.
+A granted file keeps content writes, but the managed process cannot delete or replace it.
+A tool that saves by writing a temporary file and renaming it over the granted file gets a permission error. Grant the containing directory when a tool saves that way.
+
+Safehouse trims whitespace around each configured path and resolves grants again at launch.
+Resolution therefore rejects a workspace or grant whose canonical path begins or ends with whitespace, and the policy file and editor reject a quoted path with edge whitespace.
+It also rejects a recorded component whose name contains a control character other than a tab, because the sandbox profile cannot name it.
+Snapshot preparation fails when the workspace or a grant no longer resolves to the path that policy resolution recorded.
+
 ### Provider discovery
 
 The ordinary provider supplies the picker’s model catalog before workspace routing occurs.
