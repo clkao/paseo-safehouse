@@ -161,6 +161,12 @@ Fixed final restrictions protect plugin state, snapshots, plugin code, and the d
 Changing a source file after preparation cannot change the prepared snapshot.
 The opening hook resolves the source again before preparing the snapshot. Later source changes affect only subsequent processes.
 
+The fixed restrictions name fixed paths.
+They hold only while each protected folder is outside the workspace and outside every read-write grant.
+A process that can write a folder containing a protected folder can rename the containing folder and reach the protected contents at the new path.
+A plugin checkout inside a sandboxed workspace or grant meets that condition, so plugin development is done outside the sandbox.
+A grant on a folder that contains the daemon home or the installed plugin meets it too.
+
 Safehouse trims whitespace around each configured path.
 Resolution therefore rejects a workspace or grant whose canonical path begins or ends with whitespace, and the policy file and editor reject a quoted path with edge whitespace.
 
