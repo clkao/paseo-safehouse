@@ -293,10 +293,6 @@ export async function routeCreation(
     throw launchError(request.config.provider, installed?.unavailable?.[request.config.provider] ?? "Configure Safehouse again to wrap this provider");
   const saved = await ready(paseo, provider);
   await loadPolicy(cwd, saved.features);
-  if (Object.keys(request.config.mcpServers ?? {}).length)
-    throw new Error(
-      "Safehouse requires review of external MCP bridges before launch.",
-    );
   let model = request.config.model;
   if (!model) {
     const original = installed.sources?.[provider]?.provider ?? host;
@@ -336,10 +332,6 @@ export async function prepareOpening(
   const saved = await ready(paseo, request.provider);
   const cwd = await canonicalDirectory(request.cwd);
   const policy = await loadPolicy(cwd, saved.features);
-  if (request.tools.length || Object.keys(request.mcpServers).length)
-    throw new Error(
-      "Safehouse cannot authorize daemon-side plugin tools or MCP bridges.",
-    );
   const snapshot = await prepareSnapshot(stateRoot(), policy);
   await atomicJson(receiptPath(request.agentId), {
     agentId: request.agentId,

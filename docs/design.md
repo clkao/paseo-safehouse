@@ -199,8 +199,9 @@ Detached descendants can retain the previous sandbox policy.
 
 Safehouse restricts the harness process and its children. The Paseo daemon remains outside that sandbox.
 Daemon-side tools, MCP services, and external services have separate authority.
-The implementation disables agent-side Paseo tools and rejects explicit or hook-local MCP contributions.
-Those checks do not cover MCP contributions from other plugins.
+Explicit creation MCP maps and hook-local MCP maps and tools pass through unchanged.
+Wrapped providers set `paseoTools.enabled: false` to disable the separate agent-side Paseo control bridge.
+The sandbox protects daemon state and control ports. The daemon and plugin host remain trusted.
 Additional MCP services can provide access outside the process sandbox. Users must consider each service's authority.
 Other enabled plugins are not prohibited.
 Harness-native services and enabled credentials retain their own authority.

@@ -162,6 +162,10 @@ export function SafehousePanel({
       <Text style={muted}>
         Applies to new agents in this workspace across clients. Explicit Safehouse providers always use Safehouse. Existing agents keep their provider.
       </Text>
+      <Text style={muted}>
+        Safehouse limits the agent process and its children. Additional MCP
+        services can provide access outside that sandbox.
+      </Text>
       {error || routingError ? (
         <Text
           accessibilityRole="alert"
@@ -428,8 +432,7 @@ export function SafehousePanel({
               </View>
               <Text style={muted}>
                 Reload interrupts the selected agent’s active turn. Policy
-                preparation is not runtime verification. Daemon-side tools and
-                services have separate access.
+                preparation is not runtime verification.
               </Text>
             </>
           )}
