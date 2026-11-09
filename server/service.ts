@@ -13,6 +13,7 @@ import { configuredProvider, launchError, type ProviderConfig } from "./provider
 import {
   atomicJson,
   capabilities,
+  blockedEnvironmentName,
   canonicalDirectory,
   findExecutable,
   guardProfile,
@@ -158,7 +159,7 @@ async function setupLocked(
     process.execPath,
     await fs.realpath(process.execPath),
   ];
-  for (const host of new Set([...HOSTS, ...Object.keys(current)])) {
+  for (const host of new Set([...HOSTS, ...Object.keys(current), ...Object.values(old?.sources ?? {}).map(source => source.provider)])) {
     if (old?.entries[host]) continue;
     let resolved;
     try { resolved = await configuredProvider(host, current); }
@@ -174,7 +175,16 @@ async function setupLocked(
     wrappers.push({ host, base, config, command, envPass });
     sources[id] = { provider: host, base, source: current[host] ?? null, baseSource: current[base] ?? null };
   }
-  if (!wrappers.length && !Object.keys(entries).length)
+  for (const [id, source] of Object.entries(sources)) {
+    if (!unavailable[source.provider]) continue;
+    if (current[id] === undefined) {
+      delete entries[id];
+      delete sources[id];
+    } else {
+      sources[id] = { ...source, source: current[source.provider] ?? null, baseSource: current[source.base] ?? null };
+    }
+  }
+  if (!old && !wrappers.length && !Object.keys(entries).length)
     throw new Error(
       "No configured harness can be wrapped. Check command arrays and executable availability.",
     );
@@ -189,9 +199,11 @@ async function setupLocked(
     const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions, envPass });
     const file = path.join(root, "launchers", `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`);
     bootstraps.push({ file, text });
+    const retainedMasks = Object.fromEntries(Object.entries(old?.entries[variant(host)]?.env ?? {})
+      .filter(([name, value]) => value === "" && blockedEnvironmentName(name)));
     entries[variant(host)] = { ...config, extends: base,
       label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
-      command: ["/bin/sh", file], env: policyEnvironment(config.env ?? {}, path.join(root, "catalog")),
+      command: ["/bin/sh", file], env: { ...retainedMasks, ...policyEnvironment(config.env ?? {}, path.join(root, "catalog")) },
       paseoTools: { ...config.paseoTools, enabled: false } };
   }
   for (const id of Object.keys(entries))
@@ -221,6 +233,8 @@ async function ready(paseo: Paseo, provider?: string) {
     const current = (await paseo.config.get()).config.providers ?? {};
     const entry = current[provider];
     const source = saved.sources?.[provider];
+    if (source && saved.unavailable?.[source.provider])
+      throw launchError(source.provider, "source is unavailable; restore it and use Refresh providers in the Safehouse panel");
     if (source && (!isDeepStrictEqual(current[source.provider] ?? null, source.source) ||
         !isDeepStrictEqual(current[source.base] ?? null, source.baseSource)))
       throw launchError(source.provider, "configuration changed; use Refresh providers in the Safehouse panel");
@@ -372,6 +386,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     const providers = (await paseo.config.get()).config.providers ?? {};
     configured = Object.entries(saved.entries).every(([id, entry]) => {
       const source = saved.sources?.[id];
+      if (source && saved.unavailable?.[source.provider]) return true;
       return isDeepStrictEqual(providers[id], entry) && (!source || (
         isDeepStrictEqual(providers[source.provider] ?? null, source.source) &&
         isDeepStrictEqual(providers[source.base] ?? null, source.baseSource)));

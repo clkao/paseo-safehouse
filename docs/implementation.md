@@ -253,7 +253,11 @@ The recovered command read and wrote its workspace. Sibling reads and writes ret
 
 Use `scripts/validate-setup-recovery.mjs` with `node --import tsx` and an FO-allocated `SAFEHOUSE_TEST_HOME`.
 Run its `interrupt` phase, restart that isolated daemon, then run its `retry` phase.
+Run its `retire` phase after retry to check source removal, retained files, healthy reopen preparation, inactive rejection, and source restoration.
 The daemon requires the local plugin installation and disabled voice and dictation features.
+The retirement phase exercises the opening hook without creating or resuming a native conversation.
+Temporary-host regressions also cover unwrappable sources, deleted variants, edited inactive targets, and harmless stale masks.
+Genuine pending-plan conflicts and real source-field deletions still reject refresh.
 
 
 ## Launch correction candidate

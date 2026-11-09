@@ -118,9 +118,17 @@ Calls share a queue for each daemon home within one process.
 The public API has no compare-and-swap operation, so external writers can race with setup.
 Exact readback detects resulting conflicts, but cannot exclude another daemon or an external writer.
 
+Refresh retains an unavailable source's owned variant and immutable files, but marks that variant inactive.
+Healthy providers and policy controls remain usable. New launches and reopen preparation reject inactive variants until their source returns.
+Running processes retain their existing files and provider. Refresh does not reassign them.
+If the public variant is also absent, refresh drops only its local ownership metadata.
+An interrupted pending plan still rejects source conflicts instead of discarding its evidence.
+
 Paseo recursively merges provider objects and retains omitted nested fields.
 A refresh that requires nested-field deletion fails before any file or configuration write.
 The previous installation remains intact.
+Refresh retains previous empty masks for reserved environment names, even if those names disappear from the daemon environment.
+This does not retain deleted user environment fields or nonempty values.
 Atomic file replacement covers process interruption, but does not guarantee recovery from power loss or filesystem corruption.
 
 ### Lifecycle hooks
