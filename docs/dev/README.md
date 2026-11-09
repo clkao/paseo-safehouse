@@ -41,6 +41,41 @@ The development agent runs outside Safehouse and controls an isolated test daemo
 Test agents run inside Safehouse. Development must preserve main-daemon agents, configuration, and existing installation paths.
 The plugin uses Paseo's public extension APIs. Changes to Paseo core require a separate approved design.
 
+## First releasable milestone
+
+Deliver an installable macOS beta that uses existing native harness configuration, applies a workspace's `.safehouse` policy, and preserves conversations through reload. Acceptance targets clean isolated Paseo 0.15.3 and Safehouse 0.12.0 installations. Publication follows a separate captain decision.
+
+The release requires working discovery, launch, real workspace access and denial, and native resume for Pi, Claude, and Codex. Validate cancellation, concurrent workspace isolation, policy reload, and installation failure handling on disposable fixtures. Test the exact packaged artifact on a fresh daemon. Reuse existing probes; add only cases needed to prove changed behavior.
+
+### Scope and dispatch order
+
+1. Policy serialization is delivered and independently validated. Retain its regressions in subsequent candidates.
+2. Restore normal Pi model discovery through native configuration. Investigate the bootstrap's `--no-extensions` suppression before adding any mechanism. No extension-path settings or other harness-specific controls belong in the Safehouse panel. The existing `pi-catalog-settings` task now owns this compatibility outcome, not a settings UI.
+3. Normalize managed Codex permission options automatically and verify creation and native resume on 0.15.3. No user-facing Codex permission controls are required.
+4. Make fresh provider setup retryable after partial failure and safe under concurrent calls. Preserve unrelated entries. This is clean-install reliability, not migration.
+5. Correct capability-boundary claims with a concise warning: additional MCP services can provide access outside the sandbox. Other configured plugins must not be blocked or disabled. The `plugin-capability-boundary` task owns this disclosure; its former single-plugin implementation is withdrawn.
+6. Complete the integrated provider acceptance matrix and validate the exact distributable. Package contents, setup instructions, and known limits must match observed behavior. A public listing, remote, and publication are separate decisions rather than prerequisites for a locally reviewable beta artifact.
+
+Design and independent review may overlap. Sequence changes to shared service/setup code against reviewed integration points. Keep daemon fixtures separately owned. Dispatch security-sensitive validation to a fresh worker; do not expand warning-only documentation work into a new enforcement system or exhaustive peer-plugin test framework. Existing stage gates remain in force, without repeated approval of the constraints recorded here.
+
+### Constraints and workarounds
+
+| Constraint | Supported behavior or workaround |
+| --- | --- |
+| Plugins cannot add the proposed controls to Paseo's new-agent launcher. | Use the native provider/model picker and automatic workspace routing. Keep the Safehouse panel focused on policy and reload. |
+| Catalog discovery runs without the workspace opening hook. | Keep discovery sandboxed without workspace grants; load existing native user configuration. Ordinary discovery must not require copying extension paths into Safehouse. Normal Pi loading under this sandbox still needs proof. |
+| The opening hook cannot rewrite Codex mode or provider options. | Normalize and persist compatible options at creation; prove that native resume retains them. No legacy-session migration is promised. |
+| Plugin hooks see local MCP contributions, not a final global veto point. | Disclose additional MCP authority. Do not claim global filtering or impose a single-plugin installation rule. |
+| Running processes retain their prepared policy snapshot. | Reload the selected agent from the Safehouse panel after policy edits; this interrupts its active turn and preserves the native conversation. |
+| Safehouse includes baseline filesystem access, including temporary paths. | Explain baseline access separately from workspace grants. Use denied fixtures outside baseline paths when testing isolation. |
+| Setup can currently lose its ownership record after an applied config patch. | Fix retry/recovery before release. During development use disposable daemon fixtures; never delete or take over real unrelated provider entries as a workaround. |
+| The installed desktop daemon launcher failed to find its helper app. | Development uses the pinned 0.15.3 CLI in disposable tooling, with CL's package-scoped release-age exception. Its daemon/configuration probe passed; full acceptance remains outstanding. Do not change global npm settings or the main daemon. |
+| No remote or publication destination is authorized. | Deliver a locally reviewed artifact and local merges. Ask separately before publication. |
+
+No installation migration, Paseo core changes, main-daemon changes, harness-specific panel settings, new capability broker, or peer-plugin prohibition belongs in this milestone. New tests must exercise an actual claimed behavior; no new general testing framework is needed.
+
+These scope decisions control older task proposals. Revise task designs before their next dispatch; do not implement withdrawn UI or enforcement criteria. Keep the compatibility and disclosure work tracked under the existing tasks rather than creating replacement process tasks.
+
 ## Engineering posture
 
 This is a development prototype with security-sensitive enforcement paths.
