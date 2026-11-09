@@ -17,7 +17,9 @@ The existing ASR session must remain running. The main daemon configuration must
 - [x] Verify automatic Codex Full Access selection with regression tests and a live sandbox probe.
 - [ ] Complete the desktop launch-screen and policy-panel acceptance journey.
 - [ ] Validate Claude and Codex independently.
-- [ ] Draft the workspace capability broker design and identify the minimum Subspace integration.
+- [x] Draft the workspace capability broker design and identify the minimum Subspace integration.
+- [x] Draft native launch-form controls for status and a per-agent Safehouse choice.
+- [ ] Decide the Paseo launch-form extension before implementation.
 
 ## Evidence and constraints
 
@@ -58,8 +60,14 @@ The repeatable probe is `scripts/validate-codex-mode.mjs`. It checks actual shel
 
 The desktop interface is implemented but not visually accepted.
 The panel and command center identify this plugin as **Safehouse Direct** to distinguish it from the older Safehouse plugin.
+Header and composer contributions use valid, context-scoped button IDs. Paseo rejects underscores in button IDs.
 Agent indicators report policy preparation, not verified sandbox activity.
 Snapshot cleanup, install removal, interruption tests, and remaining provider acceptance are still open.
 
 Local test records live under ignored `.local/` state.
 The isolated daemon and the direct Pi test agent remain available for continued validation.
+
+## Design drafts
+
+- [Launch controls](launch-controls.md): visible sandbox status and a per-agent choice in Paseo’s native new-agent form.
+- [Workspace capabilities](workspace-capabilities.md): restricted terminal creation for Subspace, with browser access as a separate capability.
