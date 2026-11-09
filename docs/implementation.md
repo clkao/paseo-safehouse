@@ -234,3 +234,20 @@ Use a separate Paseo 0.15.3 daemon with dictation and voice mode disabled.
 The header describes automatic routing. Explicit Safehouse providers always use Safehouse, and existing agents retain their provider.
 A successful menu save updates its initiating client immediately. Other clients read the choice during the five-second refresh.
 A failed menu save opens the panel with the RPC error and refreshes persisted status.
+
+## Provider setup recovery
+
+Setup uses protected pending intent, immutable files, exact configuration readback, and a queue for each daemon home.
+Temporary-host regressions cover lost responses across a process restart, file and commit failures, cleanup failure, conflicts, and concurrent calls.
+The macOS suite denies writes to pending intent, installation records, and current and retained launcher files.
+Direct controls overwrite those same files.
+The public API cannot atomically exclude external writers or remove nested fields through a merge patch.
+Independent validation remains required before delivery.
+
+The isolated Paseo 0.15.3 probe completed setup twice, applied a patch with a deliberately lost response, and restarted its daemon worker.
+A fresh setup process recovered four exact entries, preserved native configuration and source metadata, and removed pending intent.
+The recovered command read and wrote its workspace. Sibling reads and writes returned `EPERM`. The direct control accessed the sibling.
+
+Use `scripts/validate-setup-recovery.mjs` with `node --import tsx` and an FO-allocated `SAFEHOUSE_TEST_HOME`.
+Run its `interrupt` phase, restart that isolated daemon, then run its `retry` phase.
+The daemon requires the local plugin installation and disabled voice and dictation features.
