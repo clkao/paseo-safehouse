@@ -3,6 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "index.server.ts",
+    "index.client.tsx",
+    "paseo-plugin.json",
+    "server/",
+    "client/",
+    "shared/"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
