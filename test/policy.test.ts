@@ -11,11 +11,16 @@ import {
   policyEnvironment,
   prepareSnapshot,
   readSource,
-  requireApproval,
+  loadPolicy,
   resolvePolicy,
-  saveApproval,
+  savePolicy,
 } from "../server/policy";
-import { routeCreation, variant, prepareOpening } from "../server/service";
+import {
+  routeCreation,
+  variant,
+  prepareOpening,
+  status,
+} from "../server/service";
 
 test("policy parser rejects unknown directives and preserves custom profile names", () => {
   assert.deepEqual(
@@ -43,7 +48,7 @@ test("session policy masks inherited policy and daemon controls", () => {
   assert.equal(env.SAFEHOUSE_WORKDIR, "/protected/snapshot");
   assert.equal(env.PATH, "/usr/bin");
 });
-test("approval binds profile bytes and canonical paths; snapshots preserve approved bytes", async (t) => {
+test("existing policies authorize launch and snapshots preserve their captured bytes", async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-policy-"));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const cwd = path.join(dir, "workspace"),
@@ -54,34 +59,28 @@ test("approval binds profile bytes and canonical paths; snapshots preserve appro
   await fs.writeFile(profile, "; reviewed profile\n");
   const raw = "append-profile=speech.sb\n";
   const policy = await resolvePolicy(raw, cwd, []);
-  await saveApproval(root, canonical, policy, hash(""));
-  assert.equal(
-    (await requireApproval(root, canonical, [])).digest,
-    policy.digest,
-  );
+  await fs.writeFile(path.join(cwd, ".safehouse"), raw);
+  assert.equal((await loadPolicy(canonical, [])).digest, policy.digest);
   const snapshot = await prepareSnapshot(root, policy);
   assert.match(
     await fs.readFile(path.join(snapshot, ".safehouse"), "utf8"),
     new RegExp("add-dirs="),
   );
   await fs.writeFile(profile, "; changed profile\n");
-  await assert.rejects(requireApproval(root, canonical, []), /REVIEW_REQUIRED/);
+  assert.notEqual((await loadPolicy(canonical, [])).digest, policy.digest);
   assert.equal(
     await fs.readFile(path.join(snapshot, "profile-0.sb"), "utf8"),
     "; reviewed profile\n",
   );
   await fs.rm(path.join(cwd, ".safehouse"));
-  await assert.rejects(requireApproval(root, canonical, []), /missing/);
+  await assert.rejects(loadPolicy(canonical, []), /missing/);
 });
 test("concurrent save rejects stale review and symlink policy sources", async (t) => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-source-"));
   t.after(() => fs.rm(cwd, { recursive: true, force: true }));
   const policy = await resolvePolicy("", cwd, []);
   await fs.writeFile(path.join(cwd, ".safehouse"), "# another editor\n");
-  await assert.rejects(
-    saveApproval(path.join(cwd, "state"), cwd, policy, hash("")),
-    /changed on disk/,
-  );
+  await assert.rejects(savePolicy(cwd, policy, hash("")), /changed on disk/);
   await fs.rm(path.join(cwd, ".safehouse"));
   await fs.symlink("target", path.join(cwd, ".safehouse"));
   await assert.rejects(readSource(cwd), /regular file/);
@@ -107,7 +106,7 @@ test("unmanaged workspaces retain ordinary provider selection without daemon cal
 });
 
 test(
-  "managed routing binds each opening to its workspace and blocks policy removal",
+  "policy presence routes new agents and existing sandboxed agents require a policy",
   { skip: process.platform !== "darwin" },
   async (t) => {
     const base = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-routing-"));
@@ -158,6 +157,12 @@ test(
     });
     const requestedCatalogs: string[] = [];
     const paseo = {
+      workspaces: {
+        ref: (cwd: string) => ({
+          refresh: async () => ({ workspaceDirectory: cwd }),
+        }),
+      },
+      agents: { list: async () => ({ entries: [] }) },
       config: {
         get: async () => ({
           config: { providers: entries },
@@ -175,10 +180,23 @@ test(
       const cwd = path.join(base, name);
       await fs.mkdir(cwd);
       const canonical = await fs.realpath(cwd);
-      const policy = await resolvePolicy("", canonical, []);
-      await saveApproval(root, canonical, policy, hash(""));
+      await fs.writeFile(path.join(canonical, ".safehouse"), "");
       workspaces.push(canonical);
     }
+    // Old review records cannot gate a workspace's current policy.
+    await atomicJson(
+      path.join(root, "approvals", `${hash(workspaces[0])}.json`),
+      {
+        cwd: workspaces[0],
+        digest: "outdated",
+        raw: "# old policy",
+        approvedAt: "old",
+      },
+    );
+    const initialStatus = await status(paseo, workspaces[0]);
+    assert.equal(initialStatus.state, "ready");
+    assert.equal(initialStatus.policyValid, true);
+    assert.equal((await status(paseo, workspaces[1])).state, "ready");
     const routed = await routeCreation(
       { config: { cwd: workspaces[0], provider: "pi" } },
       paseo,
@@ -225,7 +243,19 @@ test(
       },
     };
     await fs.writeFile(path.join(workspaces[0], ".safehouse"), "# changed\n");
-    await assert.rejects(routeCreation(codexRequest, paseo), /REVIEW_REQUIRED/);
+    assert.equal(
+      (await routeCreation(codexRequest, paseo)).config.provider,
+      variant("codex"),
+    );
+    await fs.writeFile(
+      path.join(workspaces[0], ".safehouse"),
+      "enable=unknown-capability\n",
+    );
+    await assert.rejects(
+      routeCreation(codexRequest, paseo),
+      /Unsupported Safehouse capability/,
+    );
+    assert.equal((await status(paseo, workspaces[0])).state, "invalid");
     assert.equal(codexRequest.config.modeId, "auto");
     await fs.writeFile(path.join(workspaces[0], ".safehouse"), "");
     const originalEntry = entries[variant("codex")];
@@ -266,19 +296,11 @@ test(
     assert.ok(!firstRaw.includes(workspaces[1]));
     assert.equal(first.env.SAFEHOUSE_ADD_DIRS, "");
     await fs.rm(path.join(workspaces[0], ".safehouse"));
-    await assert.rejects(
-      routeCreation(
-        {
-          config: {
-            cwd: workspaces[0],
-            provider: "pi",
-            model: "fixture/model",
-          },
-        },
-        paseo,
-      ),
-      /missing/,
-    );
+    assert.equal((await status(paseo, workspaces[0])).state, "absent");
+    const ordinary = {
+      config: { cwd: workspaces[0], provider: "pi", model: "fixture/model" },
+    };
+    assert.equal(await routeCreation(ordinary, paseo), ordinary);
     await assert.rejects(
       prepareOpening(
         { ...opening(workspaces[0], "agent-0"), reason: "resume" },

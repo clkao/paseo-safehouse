@@ -1,38 +1,40 @@
 # Design
 
-Safehouse for Paseo applies reviewed workspace policies to new agent processes on macOS.
+Safehouse for Paseo applies workspace policies to new agent processes on macOS.
 This document specifies the intended behavior. The [validation plan](validation.md) defines the release gates.
 
 ## Workspace policy
 
 The presence of `.safehouse` selects Safehouse for new agents in that workspace.
-Detection does not approve its requested access. A new or changed policy requires review before launch.
-An unapproved policy blocks launch and directs the user to the Safehouse panel.
+The file authorizes its declared access by default. Launch does not require a separate approval record.
+The policy file and its custom profiles are trusted inputs for each new process.
+Invalid directives, unavailable paths, and unsupported capabilities fail rather than fall back to an ordinary launch.
 
-If `.safehouse` is absent, the header offers **Configure Safehouse**.
-The panel collects read-only directories, writable directories, capabilities, and custom profiles.
-Optional capabilities start unselected. **Save and approve** creates the file and records approval.
-An unrelated workspace without a policy retains ordinary launch behavior.
+The panel offers **Review access** to inspect or edit directory grants, capabilities, and custom profiles.
+**Save policy** writes the source file after preview and a check for concurrent edits.
+Existing policy bytes remain unchanged unless the user edits them.
+If `.safehouse` is absent, new ordinary-provider launches keep their native behavior.
+The panel can create a policy; optional capabilities start unselected.
 
-Approval binds to the canonical workspace directory, policy bytes, resolved grants, and custom profile contents.
+The policy fingerprint includes the canonical workspace, source bytes, resolved grants, and custom profile contents.
+It identifies launch snapshots and policy changes.
 Safehouse supplies baseline system, toolchain, network, and harness access. The panel distinguishes this baseline from additional grants.
-The plugin preserves existing policy bytes unless the user edits the policy.
 
-If an approved policy disappears, new launches require review or restoration.
-Existing Safehouse agents retain their provider and cannot resume as ordinary agents automatically.
-Removing a file does not authorize a weaker policy.
+New processes use the current policy. Running processes keep their captured snapshots.
+If `.safehouse` disappears, existing Safehouse agents cannot resume until a policy is restored.
+Their stored providers do not change to ordinary providers automatically.
 
 ## User interface
 
-| Workspace state | Header | Action |
-| --- | --- | --- |
-| No policy or previous approval | Configure Safehouse | Open the policy editor |
-| New or changed policy | Safehouse review required | Review requested access |
-| Approved policy and ready providers | New agents use Safehouse | Inspect the policy |
-| Missing installation or invalid policy | Safehouse setup required | Show the error and required action |
-| Non-macOS host | Safehouse unavailable | Explain the host requirement |
+| Workspace state                     | Header                | Action                       |
+| ----------------------------------- | --------------------- | ---------------------------- |
+| No policy                           | Safehouse off         | Create a policy              |
+| Valid policy and ready providers    | Safehouse on          | Inspect or edit access       |
+| Invalid policy or unreadable inputs | Safehouse error       | Show the specific error      |
+| Provider setup required             | Safehouse setup       | Configure providers          |
+| Non-macOS host                      | Safehouse unavailable | Explain the host requirement |
 
-The header is an automatic status indicator. Opening it does not change launch behavior.
+The header is an automatic status indicator. Opening it shows the policy panel. Error details belong in the panel, not the compact label.
 The user selects ordinary providers and models in Paseo’s existing picker.
 Paseo also exposes the configured Safehouse variants in that picker.
 
@@ -42,6 +44,7 @@ The initial implementation reports a prepared policy until runtime evidence supp
 
 Paseo exposes workspace header buttons and agent composer indicators.
 Composer indicators require an existing agent ID. The new-agent form has no dedicated plugin status slot.
+Per-agent disable belongs in the [launch-form proposal](launch-controls.md).
 
 ## Launch architecture
 
@@ -52,23 +55,30 @@ Paseo appends protocol arguments and manages the conversation.
 ```text
 Ordinary provider selection
     → creation hook reads workspace policy
-    → approved workspace selects its Safehouse provider variant
+    → workspace with a policy selects its Safehouse provider variant
     → opening hook prepares a protected policy snapshot
     → Paseo starts Safehouse with the native harness
 ```
 
-| Component | Responsibility |
-| --- | --- |
-| Plugin | Policy review, workspace routing, protected snapshots, status, and reload controls |
-| Paseo | Native adapters, model selection, process supervision, and conversation persistence |
-| Safehouse | Policy generation and macOS sandbox enforcement |
+| Component | Responsibility                                                                      |
+| --------- | ----------------------------------------------------------------------------------- |
+| Plugin    | Policy review, workspace routing, protected snapshots, status, and reload controls  |
+| Paseo     | Native adapters, model selection, process supervision, and conversation persistence |
+| Safehouse | Policy generation and macOS sandbox enforcement                                     |
 
 ### Provider configuration
 
 The plugin adds variants such as `pi-safehouse-direct`, with `extends: "pi"` and a command array of this form:
 
 ```json
-["/absolute/path/to/safehouse", "--trust-workdir-config", "--append-profile", "/protected/guard.sb", "--", "/absolute/path/to/pi"]
+[
+  "/absolute/path/to/safehouse",
+  "--trust-workdir-config",
+  "--append-profile",
+  "/protected/guard.sb",
+  "--",
+  "/absolute/path/to/pi"
+]
 ```
 
 The command contains literal arguments. Session environment selects the protected policy snapshot.
@@ -79,27 +89,27 @@ The variant’s default policy directory is unavailable, so launches without pre
 
 The integration targets Paseo 0.15.2 and Safehouse 0.12.0.
 
-| Integration point | Behavior |
-| --- | --- |
-| `agent.create.before` | Detect policy, require approval, preserve the selected model, and select the Safehouse variant |
-| `agent.open.before` | Recheck approval and prepare environment for creation or resume |
-| Provider command array | Start Safehouse and the native harness |
-| Plugin panel and RPCs | Review access, report readiness, and reload selected agents |
+| Integration point      | Behavior                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `agent.create.before`  | Detect and validate policy, preserve the selected model, and select the Safehouse variant |
+| `agent.open.before`    | Load current policy and prepare environment for creation or resume                        |
+| Provider command array | Start Safehouse and the native harness                                                    |
+| Plugin panel and RPCs  | Review access, report readiness, and reload selected agents                               |
 
 The opening hook cannot change executable arguments. Provider configuration supplies that execution mechanism.
 Creation hooks exclude Paseo’s internal agents. Unsupported providers must produce a clear error in a managed workspace.
 
 ### Policy snapshots
 
-The plugin copies the approved effective policy into protected state outside the workspace.
+The plugin copies the resolved effective policy into protected state outside the workspace.
 Each snapshot contains canonical grants and copies of custom profiles.
 `SAFEHOUSE_WORKDIR` selects the snapshot directory. An explicit grant supplies access to the actual workspace.
 The harness retains the actual workspace as its process directory.
 
 The plugin removes inherited policy overrides from session environment and applies its own values.
-Fixed final restrictions protect approval records, snapshots, plugin code, and the daemon’s local endpoints.
+Fixed final restrictions protect plugin state, snapshots, plugin code, and the daemon’s local endpoints.
 Changing a source file after preparation cannot change the prepared snapshot.
-Launch-time checks compare current source contents with approval before choosing that snapshot.
+The opening hook resolves the source again before preparing the snapshot. Later source changes affect only subsequent processes.
 
 ### Provider discovery
 
@@ -115,15 +125,15 @@ Provider-specific discovery and shared-process behavior remain release gates.
 ### Provider permission modes
 
 Pi and Claude retain the selected permission mode. Claude retains its normal tool approval prompts.
-For Codex, the creation hook selects **Full Access** after verifying the Safehouse provider and workspace approval.
-This mode disables Codex’s inner sandbox and approval prompts. Safehouse enforces the approved workspace policy around the process.
+For Codex, the creation hook selects **Full Access** after verifying the Safehouse provider and workspace policy.
+This mode disables Codex’s inner sandbox and approval prompts. Safehouse enforces the workspace policy around the process.
 Codex’s default mode attempts to create a second macOS sandbox, which fails inside Safehouse.
 Ordinary Codex launches in unmanaged workspaces retain their selected mode.
 
 ### Reload and resume
 
 A running process retains its launch policy.
-Reload checks current approval, stops the selected process, and resumes its native conversation under a new snapshot.
+Reload validates the current policy, stops the selected process, and resumes its native conversation under a new snapshot.
 Other agents continue running. Resume must preserve conversation history without repeating the initial task.
 Detached descendants can retain the previous sandbox policy.
 

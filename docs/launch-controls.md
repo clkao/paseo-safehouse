@@ -12,17 +12,17 @@ A Safehouse section appears beside the launch controls:
 
 ```text
 Use Safehouse                         [on]
-Approved workspace policy
+Workspace policy active
 Review access
 ```
 
-| Workspace state | Initial selection | Behavior |
-| --- | --- | --- |
-| Approved policy | On | Launch through Safehouse |
-| New or changed policy | On | Require review before a sandboxed launch |
-| No policy | Off | Turning on opens policy setup |
-| Previously approved policy removed | On | Require restoration or explicit Off for this launch |
-| Unsupported host or provider | Unavailable | Explain the limitation; never silently launch outside Safehouse |
+| Workspace state              | Initial selection | Behavior                                                                                         |
+| ---------------------------- | ----------------- | ------------------------------------------------------------------------------------------------ |
+| Existing valid policy        | On                | Launch through Safehouse without a separate review step                                          |
+| Invalid policy               | On                | Show the error and require a valid policy before sandboxed launch                                |
+| No policy                    | Off               | Turning on opens policy setup                                                                    |
+| Policy removed               | Off               | New drafts use the ordinary provider; existing sandboxed agents still require a policy to resume |
+| Unsupported host or provider | Unavailable       | Explain the limitation; never silently launch outside Safehouse                                  |
 
 When the user selects Off, the section says **Safehouse off for this agent**.
 This preserves the provider’s native permission mode. Codex Full Access applies automatically only when Safehouse is on.
@@ -30,7 +30,7 @@ The control describes the Safehouse boundary; Off does not imply that the provid
 
 Each draft owns its selection. A new draft starts from its workspace policy, not the last draft’s selection.
 A workspace change resets the decision. A provider change recalculates availability.
-Policy changes invalidate the displayed approval and require another review before a sandboxed launch.
+Policy changes refresh the displayed access. Valid policies apply automatically to the next process.
 Existing agents retain their launch configuration. Resume preserves that agent’s choice.
 
 ## Ownership
@@ -63,13 +63,13 @@ It shows review or setup within the launch flow and retains the draft prompt, pr
 
 The creation hook handles three inputs:
 
-| Choice | Server behavior |
-| --- | --- |
-| On | Verify the provider and current approval, then route through Safehouse |
-| Off | Use the ordinary provider and record the explicit per-agent decision |
-| Unspecified | Apply workspace detection, preserving existing CLI and API behavior |
+| Choice      | Server behavior                                                      |
+| ----------- | -------------------------------------------------------------------- |
+| On          | Verify the provider and current policy, then route through Safehouse |
+| Off         | Use the ordinary provider and record the explicit per-agent decision |
+| Unspecified | Apply workspace detection, preserving existing CLI and API behavior  |
 
-The hook checks current policy at submission, even if the form previously showed Approved.
+The hook checks current policy at submission, even if the form previously showed a valid policy.
 Explicit Safehouse provider variants remain sandboxed. The ordinary provider picker is the supported path for the per-agent toggle.
 The opening hook prepares the protected snapshot for sandboxed agents.
 
@@ -78,10 +78,10 @@ A future broker must reject requests that weaken its own sandbox authority.
 
 ## Acceptance
 
-1. An approved workspace shows Safehouse On before an agent exists.
+1. A workspace with a valid policy shows Safehouse On before an agent exists.
 2. On produces a real sandboxed tool call; Off preserves the ordinary provider and its mode.
 3. Two simultaneous drafts retain independent choices. Off does not change the workspace policy or another draft.
-4. A changed policy or unavailable plugin blocks an On submission.
+4. An invalid policy or unavailable plugin blocks an On submission.
 5. Policy setup and review preserve the draft and return to the same launch form.
 6. Resume retains the selected launch boundary. Existing agents remain unchanged.
 7. Desktop and compact layouts show the effective state beside the launch controls.
@@ -97,4 +97,4 @@ The inspection used Paseo 0.15.2, revision `e896c05b0`.
 
 - [Client contribution API](../../paseo-safehouse-core/packages/plugin/src/client/contracts.ts): current UI extension points.
 - [Draft submission](../../paseo-safehouse-core/packages/app/src/composer/draft/create-agent-request.ts): native create request path.
-- [Current routing](../server/service.ts): workspace approval and provider selection.
+- [Current routing](../server/service.ts): workspace policy loading and provider selection.

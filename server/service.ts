@@ -8,7 +8,6 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 import {
-  approvalPath,
   atomicJson,
   atomicWrite,
   capabilities,
@@ -21,11 +20,10 @@ import {
   prepareSnapshot,
   readJson,
   readSource,
-  requireApproval,
+  loadPolicy,
   resolvePolicy,
   run,
-  saveApproval,
-  type Approval,
+  savePolicy,
   type ResolvedPolicy,
 } from "./policy";
 
@@ -234,7 +232,7 @@ export async function save(
     throw new Error(
       "Resolved access changed since review. Review the new paths and profiles.",
     );
-  await saveApproval(stateRoot(), cwd, policy, revision);
+  await savePolicy(cwd, policy, revision);
   return { digest: policy.digest };
 }
 export async function routeCreation(
@@ -244,8 +242,7 @@ export async function routeCreation(
   const cwd = await canonicalDirectory(request.config.cwd);
   const selected = native(request.config.provider);
   const raw = await readSource(cwd);
-  const previous = await readJson<Approval>(approvalPath(stateRoot(), cwd));
-  if (!selected && raw === null && !previous) return request;
+  if (!selected && raw === null) return request;
   macOnly();
   const host = selected ?? HOSTS.find((p) => p === request.config.provider);
   if (!host)
@@ -254,7 +251,7 @@ export async function routeCreation(
     );
   const provider = variant(host);
   const saved = await ready(paseo, provider);
-  await requireApproval(stateRoot(), cwd, saved.features);
+  await loadPolicy(cwd, saved.features);
   if (Object.keys(request.config.mcpServers ?? {}).length)
     throw new Error(
       "Safehouse Direct requires review of external MCP bridges before launch.",
@@ -287,7 +284,7 @@ export async function prepareOpening(
   if (!native(request.provider)) return request;
   const saved = await ready(paseo, request.provider);
   const cwd = await canonicalDirectory(request.cwd);
-  const policy = await requireApproval(stateRoot(), cwd, saved.features);
+  const policy = await loadPolicy(cwd, saved.features);
   if (request.tools.length || Object.keys(request.mcpServers).length)
     throw new Error(
       "Safehouse Direct cannot authorize daemon-side plugin tools or MCP bridges.",
@@ -317,8 +314,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
-  const approval = await readJson<Approval>(approvalPath(stateRoot(), cwd));
-  const reviewed = !!policy && policy.digest === approval?.digest;
+  const policyValid = !!policy;
   let configured = !!saved;
   if (saved) {
     const providers = (await paseo.config.get()).config.providers ?? {};
@@ -327,15 +323,15 @@ export async function status(paseo: Paseo, workspaceId: string) {
     );
   }
   const supported = process.platform === "darwin";
-  const state: "unsupported" | "setup" | "absent" | "review" | "ready" =
+  const state: "unsupported" | "setup" | "absent" | "invalid" | "ready" =
     !supported
       ? "unsupported"
-      : raw === null && !approval && !error
-        ? "absent"
-        : error || !configured
-          ? "setup"
-          : !reviewed
-            ? "review"
+      : error
+        ? "invalid"
+        : raw === null
+          ? "absent"
+          : !configured
+            ? "setup"
             : "ready";
   const { entries } = await paseo.agents.list();
   const agents = await Promise.all(
@@ -364,7 +360,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     raw,
     revision: hash(raw ?? ""),
     digest: policy?.digest ?? null,
-    reviewed,
+    policyValid,
     error,
     features: saved?.features ?? [],
     agents,
@@ -381,11 +377,7 @@ export async function reload(
   if (agent.workspaceId !== workspaceId || !native(provider))
     throw new Error("Select a Safehouse Direct agent in this workspace.");
   const saved = await ready(paseo, provider);
-  await requireApproval(
-    stateRoot(),
-    await workspaceCwd(paseo, workspaceId),
-    saved.features,
-  );
+  await loadPolicy(await workspaceCwd(paseo, workspaceId), saved.features);
   const current = agent as typeof agent & { reload(): Promise<unknown> };
   if (typeof current.reload !== "function")
     throw new Error("Agent reload requires Paseo 0.15.2.");

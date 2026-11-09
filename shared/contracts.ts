@@ -7,12 +7,12 @@ export const statusRpc = defineRpc({
   output: z.object({
     cwd: z.string(),
     platform: z.string(),
-    state: z.enum(["unsupported", "setup", "absent", "review", "ready"]),
+    state: z.enum(["unsupported", "setup", "absent", "invalid", "ready"]),
     configured: z.boolean(),
     raw: z.string().nullable(),
     revision: z.string(),
     digest: z.string().nullable(),
-    reviewed: z.boolean(),
+    policyValid: z.boolean(),
     error: z.string().nullable(),
     features: z.array(z.string()),
     agents: z.array(
@@ -59,9 +59,9 @@ export const reloadRpc = defineRpc({
 });
 export const headerLabel = (state: string) =>
   ({
-    ready: "New agents use Safehouse",
-    review: "Safehouse review required",
-    absent: "Configure Safehouse",
+    ready: "Safehouse on",
+    invalid: "Safehouse error",
+    absent: "Safehouse off",
     unsupported: "Safehouse unavailable",
-    setup: "Safehouse setup required",
-  })[state] ?? "Checking Safehouse";
+    setup: "Safehouse setup",
+  })[state] ?? "Safehouse checking";

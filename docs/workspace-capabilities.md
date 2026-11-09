@@ -16,7 +16,7 @@ The proposed terminal starts its command through Safehouse:
 ```text
 Paseo terminal manager
   → trusted environment setup
-    → Safehouse with the caller’s approved policy snapshot
+    → Safehouse with the caller’s captured policy snapshot
       → shell or Subspace review command
 ```
 
@@ -38,11 +38,11 @@ The broker never exposes its Paseo credentials or a general RPC forwarding opera
 
 The first release supports three operations:
 
-| Operation | Request | Result |
-| --- | --- | --- |
-| Readiness | Session credential | Whether sandboxed terminal creation is permitted |
-| Open terminal | Title, command argument array, request ID | A handle owned by this session |
-| Close terminal | Owned handle | Idempotent cleanup |
+| Operation      | Request                                   | Result                                           |
+| -------------- | ----------------------------------------- | ------------------------------------------------ |
+| Readiness      | Session credential                        | Whether sandboxed terminal creation is permitted |
+| Open terminal  | Title, command argument array, request ID | A handle owned by this session                   |
+| Close terminal | Owned handle                              | Idempotent cleanup                               |
 
 The broker chooses the workspace, process directory, environment, Safehouse executable, and policy snapshot.
 Open requests cannot supply those values. Close requests cannot target arbitrary Paseo terminal IDs.
@@ -57,12 +57,12 @@ The user interacts with the TUI through Paseo’s normal terminal pane.
 ### Authorization
 
 The Safehouse panel offers **Allow sandboxed terminals in this workspace**, initially off.
-Approval records the capability alongside the reviewed policy digest in protected plugin state.
+Capability approval is separate from automatic `.safehouse` trust. It binds broker operations to a launch policy digest in protected plugin state.
 Safehouse’s `.safehouse` syntax remains unchanged.
 
 New or reloaded agents receive a session credential after approval.
-Every create request checks that the capability and the caller’s launch digest remain approved.
-A newly approved broader policy does not expand an old session’s authority; that session requires reload.
+Every create request checks the capability grant and the caller’s captured policy digest.
+A broader workspace policy does not expand an old session’s broker authority; that session requires reload.
 
 Disabling the capability, closing the agent, or reloading the plugin revokes its credentials.
 Already running terminals retain their existing OS policy. Human cleanup remains available through Paseo.

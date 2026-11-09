@@ -144,7 +144,7 @@ export function SafehousePanel({
     >
       <View style={{ gap: 5 }}>
         <Text style={{ ...text, fontSize: 23, fontWeight: "500" }}>
-          Safehouse
+          Safehouse Direct
         </Text>
         <Text style={muted}>
           {data ? headerLabel(data.state) : "Checking workspace…"}
@@ -195,13 +195,18 @@ export function SafehousePanel({
           ) : (
             <>
               <Text style={muted}>
+                {data.raw === null
+                  ? "Create a .safehouse policy to sandbox new agents in this workspace."
+                  : "New agents use the workspace .safehouse policy automatically. Review access to inspect or edit it."}
+              </Text>
+              <Text style={muted}>
                 The workspace has read and write access. Additional grants
                 extend Safehouse’s built-in system, network, toolchain, and
                 harness access.
               </Text>
               <Text style={muted}>
                 Codex uses Full Access automatically, with no Codex approval
-                prompts. Safehouse enforces the approved workspace policy.
+                prompts. Safehouse enforces the workspace policy.
               </Text>
               {data.raw === null ? (
                 <View style={{ gap: 14 }}>
@@ -361,7 +366,7 @@ export function SafehousePanel({
                     </View>
                   ))}
                   {button(
-                    "Save and approve",
+                    "Save policy",
                     () =>
                       void action(async () => {
                         await save({
@@ -373,7 +378,7 @@ export function SafehousePanel({
                         setDirty(false);
                         setReviewed(null);
                         setMessage(
-                          "Policy approved. Select a provider and model in the normal launch screen. Existing sessions retain their policy.",
+                          "Policy saved. New agents use this policy. Reload an existing agent to apply it there.",
                         );
                       }),
                   )}
@@ -404,7 +409,7 @@ export function SafehousePanel({
                               "Agent reloaded. The conversation is preserved.",
                             );
                           }),
-                        !data.reviewed,
+                        !data.policyValid,
                       )}
                     </View>
                   ))

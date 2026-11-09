@@ -7,7 +7,12 @@ import { client, home, connection } from "./live-client.mjs";
 
 const {
   workspace: { id: workspaceId, workspaceDirectory: cwd },
-} = JSON.parse(fs.readFileSync(".local/workspace.json", "utf8"));
+} = JSON.parse(
+  fs.readFileSync(
+    process.env.SAFEHOUSE_TEST_WORKSPACE ?? ".local/workspace.json",
+    "utf8",
+  ),
+);
 const marker = `CODEX-AUTOMATIC-${randomUUID()}`;
 const fixture = fs.mkdtempSync(
   path.join(path.dirname(cwd), ".safehouse-mode-probe-"),
@@ -47,7 +52,7 @@ try {
     workspaceId,
     cwd,
     provider: "codex",
-    title: "ASR · Codex · automatic Safehouse mode",
+    title: `${path.basename(cwd)} · Codex · automatic Safehouse mode`,
   });
   fs.writeFileSync(
     ".local/codex-automatic.json",

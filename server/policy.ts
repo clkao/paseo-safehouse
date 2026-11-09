@@ -183,31 +183,13 @@ export async function resolvePolicy(
   return { ...policy, digest: hash(JSON.stringify(policy)) };
 }
 export type ResolvedPolicy = Awaited<ReturnType<typeof resolvePolicy>>;
-export type Approval = {
-  cwd: string;
-  digest: string;
-  raw: string;
-  approvedAt: string;
-};
-export const approvalPath = (root: string, cwd: string) =>
-  path.join(root, "approvals", `${hash(cwd)}.json`);
-export async function requireApproval(
-  root: string,
-  cwd: string,
-  features: string[],
-) {
+export async function loadPolicy(cwd: string, features: string[]) {
   const raw = await readSource(cwd);
   if (raw === null)
     throw new Error(
-      "SAFEHOUSE_REVIEW_REQUIRED: .safehouse is missing. Restore or review a replacement policy.",
+      "SAFEHOUSE_POLICY_MISSING: .safehouse is missing. Restore it before resuming this sandboxed agent.",
     );
-  const policy = await resolvePolicy(raw, cwd, features);
-  const approval = await readJson<Approval>(approvalPath(root, cwd));
-  if (!approval || approval.cwd !== cwd || approval.digest !== policy.digest)
-    throw new Error(
-      "SAFEHOUSE_REVIEW_REQUIRED: Open Safehouse and approve the current policy before launch.",
-    );
-  return policy;
+  return resolvePolicy(raw, cwd, features);
 }
 export function guardProfile(
   readDenied: string[],
@@ -272,8 +254,7 @@ export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
     throw error;
   }
 }
-export async function saveApproval(
-  root: string,
+export async function savePolicy(
   cwd: string,
   policy: ResolvedPolicy,
   expectedRevision: string,
@@ -285,12 +266,6 @@ export async function saveApproval(
     if (hash(current ?? "") !== expectedRevision)
       throw new Error(".safehouse changed on disk. Review the new contents.");
     if (current !== policy.raw) await atomicWrite(file, policy.raw);
-    await atomicJson(approvalPath(root, cwd), {
-      cwd,
-      raw: policy.raw,
-      digest: policy.digest,
-      approvedAt: new Date().toISOString(),
-    } satisfies Approval);
   } finally {
     await lock.close();
     await fs.rm(`${file}.safehouse-direct-lock`, { force: true });

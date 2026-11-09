@@ -52,7 +52,7 @@ export default function contribute(client: PluginClientContext) {
               workspaceId: id,
               button: {
                 title: "Checking Safehouse",
-                label: "Checking Safehouse",
+                label: "Safehouse checking",
                 icon: "ShieldCheck",
                 behavior,
               },
@@ -90,7 +90,7 @@ export default function contribute(client: PluginClientContext) {
         } catch {
           headers.get(id)?.update({
             title: "Safehouse status unavailable",
-            label: "Safehouse status unavailable",
+            label: "Safehouse error",
           });
         }
       }
@@ -109,7 +109,7 @@ export default function contribute(client: PluginClientContext) {
         for (const item of [...headers.values(), ...pills.values()]) {
           item.update({
             title: "Safehouse status unavailable",
-            label: "Safehouse status unavailable",
+            label: "Safehouse error",
           });
         }
       }

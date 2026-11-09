@@ -13,22 +13,12 @@ const create = {
 try {
   await client.connect();
   const status = await rpc("status", { workspaceId });
-  if (!status.reviewed) {
-    await assert.rejects(
-      client.createAgent({ ...create, title: "Unapproved policy probe" }),
-      /SAFEHOUSE_REVIEW_REQUIRED/,
-    );
-    console.log("unapproved native-provider launch blocked");
-  }
+  assert.equal(
+    status.state,
+    "ready",
+    "The workspace must contain a valid .safehouse policy.",
+  );
   console.log("status", status.state, status.configured);
-  const policy = await rpc("preview", { workspaceId, raw: status.raw });
-  const saved = await rpc("save", {
-    workspaceId,
-    raw: status.raw,
-    revision: status.revision,
-    digest: policy.digest,
-  });
-  console.log("policy approved unchanged", saved.digest);
   const agent = await client.createAgent({
     ...create,
     title: "ASR · Pi DeepSeek · Safehouse Direct",
