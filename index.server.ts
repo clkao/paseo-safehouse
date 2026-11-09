@@ -21,7 +21,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(statusRpc, ({ workspaceId }, { paseo }) =>
     status(paseo, workspaceId),
   );
-  server.handle(setupRpc, (_input, { paseo }) => setup(paseo));
+  server.handle(setupRpc, (input, { paseo }) => setup(paseo, input));
   server.handle(previewRpc, async ({ workspaceId, raw }, { paseo }) =>
     preview(paseo, await workspaceCwd(paseo, workspaceId), raw),
   );

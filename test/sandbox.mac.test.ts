@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import http from "node:http";
 import { once } from "node:events";
+import { renderBootstrap } from "../server/launch";
 import {
   findExecutable,
   guardProfile,
@@ -15,7 +16,7 @@ import {
 } from "../server/policy";
 
 test(
-  "direct Safehouse command enforces a snapshot while preserving the real cwd",
+  "bootstrap enforces workspace snapshots and isolates catalog discovery",
   { skip: process.platform !== "darwin" },
   async (t) => {
     const binary = await findExecutable("safehouse");
@@ -41,6 +42,17 @@ test(
     const snapshot = await prepareSnapshot(root, policy);
     const guard = path.join(root, "guard.sb");
     await fs.writeFile(guard, guardProfile([root], [], [port]));
+    const bootstrap = path.join(root, "launch.sh");
+    await fs.writeFile(
+      bootstrap,
+      renderBootstrap({
+        root,
+        binary,
+        guard,
+        executable: process.execPath,
+        host: "claude",
+      }),
+    );
     const script = path.join(cwd, "probe.cjs");
     await fs.writeFile(
       script,
@@ -60,18 +72,12 @@ socket.on('error',e=>{result.network=e.code});socket.on('timeout',()=>{result.ne
 socket.on('close',()=>console.log(JSON.stringify(result)));`,
     );
     const started = Date.now();
-    const output = await run(
-      binary,
-      [
-        "--trust-workdir-config",
-        "--append-profile",
-        guard,
-        "--",
-        process.execPath,
-        script,
-      ],
-      { cwd, env: policyEnvironment(process.env, snapshot), timeout: 45000 },
-    );
+    const probe = await fs.readFile(script, "utf8");
+    const output = await run("/bin/sh", [bootstrap, "-e", probe], {
+      cwd,
+      env: policyEnvironment(process.env, snapshot),
+      timeout: 45000,
+    });
     const result = JSON.parse(output.stdout);
     t.diagnostic(`Sandbox startup and probes: ${Date.now() - started}ms`);
     assert.equal(result.cwd, cwd);
@@ -87,26 +93,35 @@ socket.on('close',()=>console.log(JSON.stringify(result)));`,
       "network",
     ])
       assert.equal(result[key], "EPERM", key);
+    const catalogOutput = await run("/bin/sh", [bootstrap, "-e", probe], {
+      cwd,
+      env: policyEnvironment(process.env, path.join(root, "catalog")),
+      timeout: 45000,
+    });
+    const catalog = JSON.parse(catalogOutput.stdout);
+    assert.equal(catalog.cwd, "/");
+    assert.equal(catalog.sandbox, "agent-safehouse");
+    for (const key of [
+      "read",
+      "write",
+      "private",
+      "state",
+      "readonly",
+      "policy",
+      "snapshot",
+      "network",
+    ])
+      assert.equal(catalog[key], "EPERM", `catalog ${key}`);
     await assert.rejects(
-      run(
-        binary,
-        [
-          "--trust-workdir-config",
-          "--append-profile",
-          guard,
-          "--",
-          "/usr/bin/true",
-        ],
-        {
-          cwd,
-          env: policyEnvironment(
-            process.env,
-            path.join(root, "preparation-required"),
-          ),
-          timeout: 15000,
-        },
-      ),
-      /does not exist/,
+      run("/bin/sh", [bootstrap], {
+        cwd,
+        env: policyEnvironment(
+          process.env,
+          path.join(root, "preparation-required"),
+        ),
+        timeout: 15000,
+      }),
+      /prepared Safehouse snapshot/,
     );
   },
 );

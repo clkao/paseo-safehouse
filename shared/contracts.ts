@@ -29,7 +29,9 @@ export const statusRpc = defineRpc({
 });
 export const setupRpc = defineRpc({
   name: "safehouse.setup",
-  input: z.object({}),
+  input: z.object({
+    piCatalogExtensions: z.array(z.string().min(1)).optional(),
+  }),
   output: z.object({ providers: z.array(z.string()) }),
 });
 export const previewRpc = defineRpc({

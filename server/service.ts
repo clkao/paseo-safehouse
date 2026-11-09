@@ -7,6 +7,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
+import { renderBootstrap } from "./launch";
 import {
   atomicJson,
   atomicWrite,
@@ -52,6 +53,7 @@ type Installation = {
   source: string;
   entries: Record<string, Variant>;
   guard: string;
+  piCatalogExtensions?: string[];
 };
 type Receipt = {
   agentId: string;
@@ -97,7 +99,10 @@ async function daemonDetails() {
 export async function installation() {
   return readJson<Installation>(path.join(stateRoot(), "installation.json"));
 }
-export async function setup(paseo: Paseo) {
+export async function setup(
+  paseo: Paseo,
+  options: { piCatalogExtensions?: string[] } = {},
+) {
   macOnly();
   const binary = await findExecutable("safehouse");
   if (!binary)
@@ -105,10 +110,19 @@ export async function setup(paseo: Paseo) {
   const caps = await capabilities(binary);
   const details = await daemonDetails();
   const old = await installation();
+  const piCatalogExtensions: string[] = [];
+  for (const extension of options.piCatalogExtensions ??
+    old?.piCatalogExtensions ??
+    []) {
+    if (!path.isAbsolute(extension))
+      throw new Error("Pi catalog extensions require absolute paths.");
+    piCatalogExtensions.push(await fs.realpath(extension));
+  }
   const root = stateRoot();
   const guard = path.join(root, "guard.sb");
   const current = (await paseo.config.get()).config.providers ?? {};
   const entries: Record<string, Variant> = {};
+  const bootstraps: { file: string; text: string }[] = [];
   const protectedPaths = [
     details.source,
     binary,
@@ -129,18 +143,25 @@ export async function setup(paseo: Paseo) {
         `Provider ${id} belongs to another configuration. It was not changed.`,
       );
     protectedPaths.push(executable, await fs.realpath(executable));
+    const text = renderBootstrap({
+      root,
+      binary,
+      guard,
+      executable,
+      host,
+      piCatalogExtensions,
+    });
+    const file = path.join(
+      root,
+      "launchers",
+      `${host}-${hash(text).slice(0, 16)}.sh`,
+    );
+    bootstraps.push({ file, text });
     entries[id] = {
       extends: host,
       label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
-      command: [
-        binary,
-        "--trust-workdir-config",
-        "--append-profile",
-        guard,
-        "--",
-        executable,
-      ],
-      env: policyEnvironment({}, path.join(root, "preparation-required")),
+      command: ["/bin/sh", file],
+      env: policyEnvironment({}, path.join(root, "catalog")),
       paseoTools: { enabled: false },
     };
   }
@@ -160,6 +181,8 @@ export async function setup(paseo: Paseo) {
       ...(mainPort ? [mainPort] : []),
     ]),
   );
+  for (const bootstrap of bootstraps)
+    await atomicWrite(bootstrap.file, bootstrap.text);
   await paseo.config.patch({ providers: entries });
   await atomicJson(path.join(root, "installation.json"), {
     binary,
@@ -167,6 +190,7 @@ export async function setup(paseo: Paseo) {
     ...details,
     entries,
     guard,
+    piCatalogExtensions,
   } satisfies Installation);
   return { providers: Object.keys(entries) };
 }

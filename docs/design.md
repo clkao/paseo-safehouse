@@ -49,7 +49,8 @@ Per-agent disable belongs in the [launch-form proposal](launch-controls.md).
 ## Launch architecture
 
 The plugin uses provider variants that extend Paseo’s native adapters.
-Each variant has a fixed command array that starts Safehouse, followed by the native harness.
+Each variant has a fixed command array that starts a protected bootstrap.
+The bootstrap replaces itself with Safehouse and the native harness.
 Paseo appends protocol arguments and manages the conversation.
 
 ```text
@@ -57,7 +58,7 @@ Ordinary provider selection
     → creation hook reads workspace policy
     → workspace with a policy selects its Safehouse provider variant
     → opening hook prepares a protected policy snapshot
-    → Paseo starts Safehouse with the native harness
+    → bootstrap starts Safehouse with the native harness
 ```
 
 | Component | Responsibility                                                                      |
@@ -71,19 +72,15 @@ Ordinary provider selection
 The plugin adds variants such as `pi-safehouse-direct`, with `extends: "pi"` and a command array of this form:
 
 ```json
-[
-  "/absolute/path/to/safehouse",
-  "--trust-workdir-config",
-  "--append-profile",
-  "/protected/guard.sb",
-  "--",
-  "/absolute/path/to/pi"
-]
+["/bin/sh", "/protected/launchers/pi-<content-hash>.sh"]
 ```
 
-The command contains literal arguments. Session environment selects the protected policy snapshot.
+The generated bootstrap quotes literal paths and preserves Paseo’s arguments.
+Session environment selects the protected policy snapshot.
 Ordinary provider configuration remains intact. Installation rejects collisions with unrelated provider entries.
-The variant’s default policy directory is unavailable, so launches without prepared session environment fail.
+The variant’s default environment selects restricted catalog discovery.
+Prepared launches require an existing snapshot directly beneath the plugin’s snapshot directory.
+Missing or malformed environment values fail before the harness starts.
 
 ### Lifecycle hooks
 
@@ -93,7 +90,7 @@ The integration targets Paseo 0.15.2 and Safehouse 0.12.0.
 | ---------------------- | ----------------------------------------------------------------------------------------- |
 | `agent.create.before`  | Detect and validate policy, preserve the selected model, and select the Safehouse variant |
 | `agent.open.before`    | Load current policy and prepare environment for creation or resume                        |
-| Provider command array | Start Safehouse and the native harness                                                    |
+| Provider command array | Start the bootstrap, then Safehouse and the native harness                                |
 | Plugin panel and RPCs  | Review access, report readiness, and reload selected agents                               |
 
 The opening hook cannot change executable arguments. Provider configuration supplies that execution mechanism.
@@ -117,10 +114,21 @@ The ordinary provider supplies the picker’s model catalog before workspace rou
 This discovery retains Paseo’s host-side behavior and is outside the harness sandbox guarantee.
 The creation hook must preserve a concrete model before selecting the variant.
 
-Variant discovery can run before the opening hook and lacks prepared session environment.
-It must fail safely rather than use another workspace’s policy or silently run on the host.
-The implementation must prove that these failures do not prevent ordinary-picker launches.
-Provider-specific discovery and shared-process behavior remain release gates.
+Variant discovery bypasses the opening hook and receives the provider’s default environment.
+The bootstrap changes its directory to `/` and starts Safehouse with an explicitly empty workdir grant.
+Discovery retains Safehouse’s baseline harness access and fixed protections for plugin state and daemon endpoints.
+It receives no workspace grants or workspace custom profiles.
+
+Pi discovery disables automatic extension loading. An explicit `piCatalogExtensions` list can load extensions that register models.
+The `safehouse.setup` RPC accepts absolute extension paths and persists them in the installation record.
+Later setup calls preserve the list unless they supply a replacement. An empty array clears it.
+These paths do not grant filesystem access. Extensions and dependencies must remain readable under the catalog sandbox.
+Model providers from omitted extensions are absent from the catalog.
+Normal Pi sessions retain their configured extensions and workspace policy.
+
+The catalog marker selects a restricted launch mode, not a protocol authorization check.
+If a caller uses that marker for a conversation, the process retains catalog restrictions and receives no workspace access.
+Supported session launches require the opening hook, which validates the workspace policy and supplies a snapshot.
 
 ### Provider permission modes
 

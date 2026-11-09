@@ -5,20 +5,20 @@ Results and outstanding work belong in [implementation status](implementation.md
 
 ## Release gates
 
-| Property                  | Required evidence                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Automatic routing         | Ordinary provider selection uses its Safehouse variant only in a managed workspace.                                                                           |
-| Policy creation           | Configure Safehouse collects grants and capabilities, then saves `.safehouse`.                                                                                |
-| Policy authority          | Existing valid `.safehouse` files authorize launch without a review record. Valid edits apply to new processes. Invalid policies block launch.                |
-| Complete policy transport | Grants, capabilities, and custom profiles reach Safehouse while the harness retains its workspace directory.                                                  |
-| Snapshot integrity        | A running process retains its captured policy after source changes. The harness cannot edit policy sources or enforcement state.                              |
-| Workspace isolation       | Concurrent agents retain separate policies. Unrelated workspaces and existing sessions retain their behavior.                                                 |
-| Discovery                 | Ordinary-picker selection survives variant discovery failures. Discovery never borrows another workspace’s grants.                                            |
-| Failure handling          | Missing preparation, provider collisions, and unavailable Safehouse produce errors without a host fallback.                                                   |
-| Status                    | Concise header states distinguish On, Off, Setup, and Error. Agent indicators distinguish policy preparation from runtime evidence.                           |
-| Process supervision       | Cancellation, child cleanup, exit reporting, and native resume retain expected behavior.                                                                      |
-| Provider modes            | Codex launches through Safehouse automatically use Full Access and remain restricted by Safehouse. Unmanaged launches and other providers retain their modes. |
-| Platform                  | Non-macOS hosts cannot configure or launch Safehouse variants.                                                                                                |
+| Property                  | Required evidence                                                                                                                                                |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automatic routing         | Ordinary provider selection uses its Safehouse variant only in a managed workspace.                                                                              |
+| Policy creation           | Configure Safehouse collects grants and capabilities, then saves `.safehouse`.                                                                                   |
+| Policy authority          | Existing valid `.safehouse` files authorize launch without a review record. Valid edits apply to new processes. Invalid policies block launch.                   |
+| Complete policy transport | Grants, capabilities, and custom profiles reach Safehouse while the harness retains its workspace directory.                                                     |
+| Snapshot integrity        | A running process retains its captured policy after source changes. The harness cannot edit policy sources or enforcement state.                                 |
+| Workspace isolation       | Concurrent agents retain separate policies. Unrelated workspaces and existing sessions retain their behavior.                                                    |
+| Discovery                 | Variant catalogs load under Safehouse without workspace access. Configured Pi provider extensions supply their models. Discovery never borrows workspace grants. |
+| Failure handling          | Missing or invalid bootstrap environment, provider collisions, and unavailable Safehouse produce errors without a host fallback.                                 |
+| Status                    | Concise header states distinguish On, Off, Setup, and Error. Agent indicators distinguish policy preparation from runtime evidence.                              |
+| Process supervision       | Cancellation, child cleanup, exit reporting, and native resume retain expected behavior.                                                                         |
+| Provider modes            | Codex launches through Safehouse automatically use Full Access and remain restricted by Safehouse. Unmanaged launches and other providers retain their modes.    |
+| Platform                  | Non-macOS hosts cannot configure or launch Safehouse variants.                                                                                                   |
 
 The plugin’s absence prevents automatic routing enforcement. This is an explicit boundary, not a passing failure-handling result.
 Unresolved gates prevent a release claim.
@@ -32,7 +32,7 @@ The existing ASR agent remains running throughout the journey.
 Acceptance requires:
 
 1. An ordinary provider selection that creates a second agent through the configured Safehouse variant.
-2. A process trace that shows Paseo starting Safehouse directly with the native harness.
+2. A process trace that shows the bootstrap replacing itself with Safehouse and the native harness.
 3. Successful chat and a real tool call in the workspace.
 4. Successful workspace reads and writes, with denied access to an ungranted sibling fixture.
 5. Denied access to daemon endpoints, protected plugin state, and policy snapshots.

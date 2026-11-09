@@ -2,7 +2,7 @@
 
 ## Scope
 
-The implementation targets direct Safehouse provider variants with automatic workspace policy detection.
+The implementation targets Safehouse provider variants with automatic workspace policy detection.
 Development and live probes use an isolated Paseo 0.15.2 daemon.
 The plugin is also installed on the main daemon. Plugin reloads must preserve existing sessions.
 
@@ -21,6 +21,8 @@ The plugin is also installed on the main daemon. Plugin reloads must preserve ex
 - [x] Draft native launch-form controls for status and a per-agent Safehouse choice.
 - [ ] Decide the Paseo launch-form extension before implementation. Per-agent disable belongs in that extension.
 - [x] Verify automatic policy trust and installed status data for concise header labels.
+- [x] Validate restricted catalog discovery through a protected bootstrap on the development daemon.
+- [ ] Resolve the release-review findings before general distribution.
 
 ## Evidence and constraints
 
@@ -28,14 +30,14 @@ Paseo 0.15.2 permits provider changes in `agent.create.before`.
 `agent.open.before` permits only environment, tools, and MCP changes.
 Pi catalog discovery starts a runtime without the session opening hook.
 Configured replacement models do not eliminate that runtime because Pi exposes no static modes.
-Native provider selection and direct Safehouse creation succeeded despite failed variant discovery.
+The bootstrap supplies restricted catalog discovery when the session-opening hook does not run.
 The creation hook preserves the selected model or resolves the native provider’s default before routing.
 
 ## Validation evidence
 
 Validation date: 2026-11-08, America/Los_Angeles.
 Runtime: Paseo 0.15.2, Safehouse 0.12.0, macOS.
-TypeScript checks and seven automated tests pass.
+TypeScript checks and eight automated tests pass.
 Tests cover policy changes, file removal, separate workspace snapshots, unprepared launches, and real macOS access restrictions.
 Mode tests cover automatic Codex selection, provider verification, policy validation, and unchanged modes for other providers and unmanaged workspaces.
 
@@ -77,6 +79,59 @@ Snapshot cleanup, install removal, interruption tests, and remaining provider ac
 
 Local test records live under ignored `.local/` state.
 The isolated daemon and the direct Pi test agent remain available for continued validation.
+
+## Catalog bootstrap validation
+
+The development daemon returns model catalogs for Pi, Claude, and Codex under Safehouse.
+The recorded counts are 27, 17, and 8 models respectively.
+Pi discovery explicitly loads the installed Lunaroute provider extension and includes `lunaroute/deepseek-4.1-flash`.
+Automatic Pi extension discovery remains disabled for catalog probes. Normal sessions retain their configured extensions.
+
+The repeatable test is `scripts/validate-catalog-bootstrap.mjs`.
+Agent `f093d202-7c70-43c2-a5a3-3e509423e019` completed a real tool probe and a native resume in ASR.
+Both probes allowed workspace access and denied sibling access, protected state reads, policy writes, and connections to both daemon ports.
+Resume retained the conversation marker and native handle, and prepared a different snapshot.
+The workspace policy hash remained unchanged.
+The macOS regression test also denies workspace access during catalog discovery and rejects invalid bootstrap environment values.
+
+The bootstrap is configured only on the development daemon. The main daemon retains its previous provider commands.
+Existing main-daemon agents were not reloaded. General release remains blocked by the findings below.
+
+## Release review
+
+Review scope: the current plugin, including the catalog bootstrap, against Paseo 0.15.2 and the official plugin documentation.
+Passing smoke tests establish specific behaviors, not the complete security boundary.
+
+1. **High: workspace paths can inject policy directives.** `canonicalDirectory` accepts line breaks, and `prepareSnapshot` interpolates the workspace path into `.safehouse`.
+   A disposable workspace with an empty source policy produced an additional sibling grant through its path.
+   A real sandboxed read of that sibling succeeded with the fixed guard applied.
+   Reject policy delimiters in every serialized path, including workspace and generated state paths. Add adversarial serialization tests.
+2. **High: the bridge rejection does not cover other plugins.** `prepareOpening` checks `request.tools` and `request.mcpServers` as though they describe the final launch.
+   Paseo supplies plugin-local maps and merges contributions afterward. The check cannot reject another plugin’s tools or MCP servers.
+   The fixed daemon-port guard still applies, but it does not establish that all external capabilities were rejected.
+   Define and enforce a supported coexistence boundary, and make the documentation match it. See [Paseo hooks](https://paseo.sh/docs/plugins/hooks).
+3. **Medium: explicit Codex options override Full Access.** Creation changes `modeId` but preserves conflicting `providerOptions`.
+   Paseo gives explicit sandbox and approval options precedence, so a saved `workspace-write` option can restore the failing inner sandbox.
+   Normalize or reject conflicts and cover creation and resume. See [Codex option precedence in the hook reference](https://paseo.sh/docs/plugins/hooks).
+4. **Medium: partial setup cannot recover.** Provider configuration changes before the installation record is saved.
+   A simulated lost response after the host applied the patch left three variants installed without an ownership record.
+   Repeating setup rejected those variants as unrelated configuration. Add recoverable installation state and serialize concurrent setup operations.
+5. **Medium: Pi catalog configuration lacks a user interface.** Provider extensions require absolute paths through `safehouse.setup`.
+   Without that configuration, the catalog can omit models available to normal Pi sessions. The panel exposes no control for this list.
+   Add installation settings and visible discovery errors. Keep directory grants separate from extension selection.
+
+Publication preparation also remains incomplete. The package is private, has no repository metadata, and the repository has no remote.
+The manifest has no interface image. The public listing must describe data access, provider traffic, requirements, and limitations.
+The package dry run includes all imported runtime modules and excludes `.local/`, but also includes development scripts and test files.
+Use an explicit package file list and exercise the exact distributable on a clean daemon before submission.
+Paseo requires an interface image for a visual plugin and an installable public source for registry submission. See [publishing](https://paseo.sh/docs/plugins/publishing).
+
+The runtime directory boundaries, schema-defined RPCs, host libraries in development dependencies, version upper bound, and timer cleanup follow the plugin contract.
+Align the development SDK with the supported Paseo release and migrate compatibility hook aliases to the documented `addHook` API.
+Use scoped observations or cached status instead of enumerating every workspace and agent from each client every five seconds.
+These practices follow the [plugin reference](https://paseo.sh/docs/plugins/reference).
+
+Claude and Codex resume, cancellation, plugin update/removal, clean installation, and full desktop acceptance remain unverified release gates.
 
 ## Design drafts
 

@@ -29,6 +29,10 @@ The plugin selects Codex **Full Access** automatically for Safehouse launches.
 This disables Codex’s inner sandbox and approval prompts.
 Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
 
+Model discovery runs in a separate Safehouse process with no workspace grants.
+Pi discovery loads only explicitly configured provider extensions. Normal Pi sessions retain their configured extensions.
+The [design](docs/design.md#provider-discovery) describes catalog extension configuration and its limits.
+
 ## Development
 
 The prototype requires Paseo 0.15.2 and Safehouse 0.12.0 on the daemon host.
