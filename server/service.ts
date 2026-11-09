@@ -8,9 +8,10 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
 import { renderBootstrap } from "./launch";
+import { finishPending, savePending, serializeSetup, validateInstallation } from "./setup";
+import { configuredProvider, launchError, type ProviderConfig } from "./providers";
 import {
   atomicJson,
-  atomicWrite,
   capabilities,
   canonicalDirectory,
   findExecutable,
@@ -37,14 +38,9 @@ export const native = (provider: string) =>
 export const daemonHome = () =>
   path.resolve(process.env.PASEO_HOME || path.join(homedir(), ".paseo"));
 export const stateRoot = () => path.join(daemonHome(), "safehouse");
-type Variant = {
-  extends: string;
-  label: string;
-  command: string[];
-  env: Record<string, string>;
-  paseoTools: { enabled: boolean };
-};
-type Installation = {
+type Variant = ProviderConfig;
+type Source = { provider: string; base: string; source: ProviderConfig | null; baseSource: ProviderConfig | null };
+export type Installation = {
   binary: string;
   features: string[];
   version: string;
@@ -52,6 +48,8 @@ type Installation = {
   port: number;
   source: string;
   entries: Record<string, Variant>;
+  sources?: Record<string, Source>;
+  unavailable?: Record<string, string>;
   guard: string;
   piCatalogExtensions?: string[];
 };
@@ -67,14 +65,31 @@ type Receipt = {
 export const receiptPath = (id: string) =>
   path.join(stateRoot(), "agents", `${hash(id)}.json`);
 
+const routingPath = (cwd: string) => path.join(stateRoot(), "workspaces", `${hash(cwd)}.json`);
+async function routingChoice(cwd: string): Promise<boolean | null> {
+  try {
+    const record = JSON.parse(await fs.readFile(routingPath(cwd), "utf8"));
+    if (!record || record.cwd !== cwd || typeof record.enabled !== "boolean") throw new Error("Invalid record");
+    return record.enabled;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new Error("Safehouse routing state is unreadable or invalid. Choose automatic routing again.");
+  }
+}
+export async function setWorkspaceRouting(paseo: Paseo, workspaceId: string, enabled: boolean) {
+  const cwd = await workspaceCwd(paseo, workspaceId);
+  await atomicJson(routingPath(cwd), { cwd, enabled });
+  return { enabled };
+}
+
 export async function workspaceCwd(paseo: Paseo, id: string) {
   const workspace = await paseo.workspaces.ref(id).refresh();
   if (!workspace?.workspaceDirectory)
     throw new Error("The workspace directory is unavailable.");
   return canonicalDirectory(workspace.workspaceDirectory);
 }
-async function daemonDetails() {
-  const home = await canonicalDirectory(daemonHome());
+async function daemonDetails(capturedHome = daemonHome()) {
+  const home = await canonicalDirectory(capturedHome);
   const config = await readJson<{
     daemon?: { listen?: string };
     plugins?: Record<string, { path?: string }>;
@@ -104,12 +119,23 @@ export async function setup(
   options: { piCatalogExtensions?: string[] } = {},
 ) {
   macOnly();
+  const home = await canonicalDirectory(daemonHome());
+  const root = path.join(home, "safehouse");
+  return serializeSetup(root, () => setupLocked(paseo, options, home, root));
+}
+async function setupLocked(
+  paseo: Paseo, options: { piCatalogExtensions?: string[] }, home: string, root: string,
+) {
+  const details = await daemonDetails(home);
+  const prior = await readJson<Installation>(path.join(root, "installation.json"));
+  if (prior !== null) validateInstallation(prior);
+  await finishPending(root, paseo, details);
+  const stored = await readJson<Installation>(path.join(root, "installation.json"));
+  const old = stored === null ? null : validateInstallation(stored);
   const binary = await findExecutable("safehouse");
   if (!binary)
     throw new Error("Install agent-safehouse on the daemon Mac before setup.");
   const caps = await capabilities(binary);
-  const details = await daemonDetails();
-  const old = await installation();
   const piCatalogExtensions: string[] = [];
   for (const extension of options.piCatalogExtensions ??
     old?.piCatalogExtensions ??
@@ -118,11 +144,13 @@ export async function setup(
       throw new Error("Pi catalog extensions require absolute paths.");
     piCatalogExtensions.push(await fs.realpath(extension));
   }
-  const root = stateRoot();
-  const guard = path.join(root, "guard.sb");
+
   const current = (await paseo.config.get()).config.providers ?? {};
-  const entries: Record<string, Variant> = {};
+  const entries: Record<string, Variant> = { ...old?.entries };
+  const sources: Record<string, Source> = { ...old?.sources };
+  const unavailable: Record<string, string> = {};
   const bootstraps: { file: string; text: string }[] = [];
+  const wrappers: { host: string; base: string; config: ProviderConfig; command: string[] }[] = [];
   const protectedPaths = [
     details.source,
     binary,
@@ -130,68 +158,51 @@ export async function setup(
     process.execPath,
     await fs.realpath(process.execPath),
   ];
-  for (const host of HOSTS) {
-    const executable = await findExecutable(host);
-    if (!executable) continue;
-    if (current[host]?.command)
-      throw new Error(
-        `The ${host} provider has a custom command. Safehouse launch requires a native executable configuration.`,
-      );
+  for (const host of new Set([...HOSTS, ...Object.keys(current)])) {
+    if (old?.entries[host]) continue;
+    let resolved;
+    try { resolved = await configuredProvider(host, current); }
+    catch (e) { unavailable[host] = String(e); continue; }
+    const { base, config, command } = resolved;
+    const executable = command[0];
     const id = variant(host);
     if (current[id] && !isDeepStrictEqual(current[id], old?.entries[id]))
       throw new Error(
         `Provider ${id} belongs to another configuration. It was not changed.`,
       );
     protectedPaths.push(executable, await fs.realpath(executable));
-    const text = renderBootstrap({
-      root,
-      binary,
-      guard,
-      executable,
-      host,
-      piCatalogExtensions,
-    });
-    const file = path.join(
-      root,
-      "launchers",
-      `${host}-${hash(text).slice(0, 16)}.sh`,
-    );
-    bootstraps.push({ file, text });
-    entries[id] = {
-      extends: host,
-      label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
-      command: ["/bin/sh", file],
-      env: policyEnvironment({}, path.join(root, "catalog")),
-      paseoTools: { enabled: false },
-    };
+    wrappers.push({ host, base, config, command });
+    sources[id] = { provider: host, base, source: current[host] ?? null, baseSource: current[base] ?? null };
   }
-  if (!Object.keys(entries).length)
+  if (!wrappers.length && !Object.keys(entries).length)
     throw new Error(
-      "No supported native harness was found on the daemon PATH.",
+      "No configured harness can be wrapped. Check command arrays and executable availability.",
     );
   const mainHome = path.join(homedir(), ".paseo");
   const mainPid = await readJson<{ listen?: string }>(
     path.join(mainHome, "paseo.pid"),
   );
   const mainPort = Number(mainPid?.listen?.split(":").at(-1));
-  await atomicWrite(
-    guard,
-    guardProfile([root, details.home, mainHome], protectedPaths, [
-      details.port,
-      ...(mainPort ? [mainPort] : []),
-    ]),
-  );
-  for (const bootstrap of bootstraps)
-    await atomicWrite(bootstrap.file, bootstrap.text);
-  await paseo.config.patch({ providers: entries });
-  await atomicJson(path.join(root, "installation.json"), {
-    binary,
-    ...caps,
-    ...details,
-    entries,
-    guard,
-    piCatalogExtensions,
-  } satisfies Installation);
+  const guardText = guardProfile([root, details.home, mainHome], protectedPaths, [details.port, ...(mainPort ? [mainPort] : [])]);
+  const guard = path.join(root, `guard-${hash(guardText).slice(0, 16)}.sb`);
+  for (const { host, base, config, command } of wrappers) {
+    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions });
+    const file = path.join(root, "launchers", `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`);
+    bootstraps.push({ file, text });
+    entries[variant(host)] = { ...config, extends: base,
+      label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
+      command: ["/bin/sh", file], env: policyEnvironment(config.env ?? {}, path.join(root, "catalog")),
+      paseoTools: { ...config.paseoTools, enabled: false } };
+  }
+  for (const id of Object.keys(entries))
+    if (!isDeepStrictEqual(current[id] ?? null, old?.entries[id] ?? null))
+      throw new Error(`Provider ${id} belongs to another configuration. It was not changed.`);
+  await savePending(root, {
+    installation: { binary, ...caps, ...details, entries, sources, unavailable, guard, piCatalogExtensions },
+    previous: Object.fromEntries(Object.keys(entries).map(id => [id, current[id] ?? null])),
+    files: [{ file: guard, text: guardText }, ...bootstraps],
+  });
+  await finishPending(root, paseo, details);
   return { providers: Object.keys(entries) };
 }
 async function ready(paseo: Paseo, provider?: string) {
@@ -207,7 +218,12 @@ async function ready(paseo: Paseo, provider?: string) {
       "The daemon endpoint changed. Configure Safehouse providers again.",
     );
   if (provider) {
-    const entry = (await paseo.config.get()).config.providers?.[provider];
+    const current = (await paseo.config.get()).config.providers ?? {};
+    const entry = current[provider];
+    const source = saved.sources?.[provider];
+    if (source && (!isDeepStrictEqual(current[source.provider] ?? null, source.source) ||
+        !isDeepStrictEqual(current[source.base] ?? null, source.baseSource)))
+      throw launchError(source.provider, "configuration changed; Configure Safehouse again");
     if (
       !saved.entries[provider] ||
       !isDeepStrictEqual(entry, saved.entries[provider])
@@ -264,16 +280,17 @@ export async function routeCreation(
   paseo: Paseo,
 ) {
   const cwd = await canonicalDirectory(request.config.cwd);
-  const selected = native(request.config.provider);
+  const installed = await installation();
+  const selected = installed?.entries[request.config.provider];
+  const choice = await routingChoice(cwd);
+  if (!selected && choice === false) return request;
   const raw = await readSource(cwd);
-  if (!selected && raw === null) return request;
+  if (!selected && choice !== true && raw === null) return request;
   macOnly();
-  const host = selected ?? HOSTS.find((p) => p === request.config.provider);
-  if (!host)
-    throw new Error(
-      `Safehouse does not yet support provider ${request.config.provider}.`,
-    );
-  const provider = variant(host);
+  const provider = selected ? request.config.provider : variant(request.config.provider);
+  const host = installed?.sources?.[provider]?.base ?? (selected ? native(provider) : request.config.provider);
+  if (!installed?.entries[provider] || !host)
+    throw launchError(request.config.provider, installed?.unavailable?.[request.config.provider] ?? "Configure Safehouse again to wrap this provider");
   const saved = await ready(paseo, provider);
   await loadPolicy(cwd, saved.features);
   if (Object.keys(request.config.mcpServers ?? {}).length)
@@ -282,7 +299,8 @@ export async function routeCreation(
     );
   let model = request.config.model;
   if (!model) {
-    const catalog = await paseo.providers.listModels(host, { cwd });
+    const original = installed.sources?.[provider]?.provider ?? host;
+    const catalog = await paseo.providers.listModels(original, { cwd });
     const models = catalog.models ?? [];
     model = (models.find((m) => m.isDefault) ?? models[0])?.id;
     if (!model)
@@ -314,7 +332,7 @@ export async function prepareOpening(
   request: PluginSessionOpenRequest,
   paseo: Paseo,
 ) {
-  if (!native(request.provider)) return request;
+  if (!(await installation())?.entries[request.provider]) return request;
   const saved = await ready(paseo, request.provider);
   const cwd = await canonicalDirectory(request.cwd);
   const policy = await loadPolicy(cwd, saved.features);
@@ -340,6 +358,8 @@ export async function status(paseo: Paseo, workspaceId: string) {
   let error: string | null = null,
     raw: string | null = null,
     policy: ResolvedPolicy | null = null;
+  let routing: boolean | null = null, routingError: string | null = null;
+  try { routing = await routingChoice(cwd); } catch (e) { routingError = String(e); }
   try {
     raw = await readSource(cwd);
     if (raw !== null && saved)
@@ -347,19 +367,27 @@ export async function status(paseo: Paseo, workspaceId: string) {
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
+  if (routing === true && raw === null && !error) error = "Workspace .safehouse is missing. Create or restore the policy, or disable automatic Safehouse.";
   const policyValid = !!policy;
   let configured = !!saved;
   if (saved) {
     const providers = (await paseo.config.get()).config.providers ?? {};
-    configured = Object.entries(saved.entries).every(([id, entry]) =>
-      isDeepStrictEqual(providers[id], entry),
-    );
+    configured = Object.entries(saved.entries).every(([id, entry]) => {
+      const source = saved.sources?.[id];
+      return isDeepStrictEqual(providers[id], entry) && (!source || (
+        isDeepStrictEqual(providers[source.provider] ?? null, source.source) &&
+        isDeepStrictEqual(providers[source.base] ?? null, source.baseSource)));
+    });
   }
   const supported = process.platform === "darwin";
-  const state: "unsupported" | "setup" | "absent" | "invalid" | "ready" =
+  const state: "unsupported" | "setup" | "absent" | "invalid" | "ready" | "off" =
     !supported
       ? "unsupported"
-      : error
+      : routingError
+        ? "invalid"
+        : routing === false
+          ? "off"
+          : error
         ? "invalid"
         : raw === null
           ? "absent"
@@ -371,7 +399,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     entries
       .filter(
         ({ agent }) =>
-          agent.workspaceId === workspaceId && native(agent.provider),
+          agent.workspaceId === workspaceId && saved?.entries[agent.provider],
       )
       .map(async ({ agent }) => {
         const receipt = await readJson<Receipt>(receiptPath(agent.id));
@@ -390,11 +418,12 @@ export async function status(paseo: Paseo, workspaceId: string) {
     platform: process.platform,
     state,
     configured,
+    routingEnabled: routing ?? (raw !== null || error !== null),
     raw,
     revision: hash(raw ?? ""),
     digest: policy?.digest ?? null,
     policyValid,
-    error,
+    error: routingError ?? error,
     features: saved?.features ?? [],
     agents,
   };
@@ -407,7 +436,7 @@ export async function reload(
   const agent = paseo.agents.ref(agentId);
   await agent.refresh();
   const provider = agent.current()?.provider ?? "";
-  if (agent.workspaceId !== workspaceId || !native(provider))
+  if (agent.workspaceId !== workspaceId || !(await installation())?.entries[provider])
     throw new Error("Select a Safehouse agent in this workspace.");
   const saved = await ready(paseo, provider);
   await loadPolicy(await workspaceCwd(paseo, workspaceId), saved.features);

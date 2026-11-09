@@ -7,11 +7,16 @@ export function renderBootstrap(input: {
   root: string;
   binary: string;
   guard: string;
-  executable: string;
-  host: "pi" | "claude" | "codex";
+  executable?: string;
+  command?: string[];
+  host: string;
   piCatalogExtensions?: string[];
 }) {
-  const { root, binary, guard, executable, host } = input;
+  const { root, binary, guard, host } = input;
+  const command = input.command ?? [input.executable!];
+  if (!command.length || command.some((arg) => typeof arg !== "string" || arg.includes("\0")) || !command[0])
+    throw new Error("Safehouse requires a nonempty literal command array.");
+  const argv = command.map(quote).join(" ");
   const snapshots = path.join(root, "snapshots");
   const catalogArgs =
     host === "pi"
@@ -30,7 +35,7 @@ if [ "\${SAFEHOUSE_WORKDIR-}" = ${quote(path.join(root, "catalog"))} ]; then
   # Catalog discovery has no workspace policy or session-opening hook.
   cd /
   export SAFEHOUSE_WORKDIR=''
-  exec ${quote(binary)} --workdir '' --append-profile ${quote(guard)} -- ${quote(executable)}${catalogArgs} "$@"
+  exec ${quote(binary)} --workdir '' --append-profile ${quote(guard)} -- ${argv}${catalogArgs} "$@"
 fi
 case "\${SAFEHOUSE_WORKDIR-}" in
   ${quote(snapshots)}/*)
@@ -39,7 +44,7 @@ case "\${SAFEHOUSE_WORKDIR-}" in
       ''|.|..|*/*) ;;
       *)
         if [ -f "$SAFEHOUSE_WORKDIR/.safehouse" ]; then
-          exec ${quote(binary)} --trust-workdir-config --append-profile ${quote(guard)} -- ${quote(executable)} "$@"
+          exec ${quote(binary)} --trust-workdir-config --append-profile ${quote(guard)} -- ${argv} "$@"
         fi
         ;;
     esac

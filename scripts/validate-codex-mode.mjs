@@ -153,6 +153,15 @@ try {
     evidence.results.at(-1).effective = { approval: effective.approval_policy, sandbox: effective.sandbox_policy };
     evidence.results.at(-1).nativeHandle = stored.persistence.nativeHandle;
     if (phase === "initial") {
+      if (process.env.SAFEHOUSE_TEST_ROUTING === "1") {
+        await rpc("set-workspace-routing", { workspaceId, enabled: false });
+        assert.equal((await rpc("status", { workspaceId })).routingEnabled, false);
+        const unchanged = (await client.fetchAgent(agent.id)).agent;
+        assert.equal(unchanged.id, agent.id);
+        assert.equal(unchanged.provider, "codex-safehouse");
+        for (const [pid] of server) process.kill(Number(pid), 0);
+        evidence.routing = { disabled: true, processContinued: true };
+      }
       await rpc("reload", { workspaceId, agentId: agent.id });
     } else {
       assert.deepEqual(stored.persistence.nativeHandle, evidence.results[0].nativeHandle);
@@ -161,6 +170,14 @@ try {
       assert.ok(server.some(([pid]) => !previous.includes(pid)), "Reload must start a new native process");
     }
     console.log(JSON.stringify({ phase, result }));
+  }
+  if (process.env.SAFEHOUSE_TEST_ROUTING === "1") {
+    await rpc("set-workspace-routing", { workspaceId, enabled: true });
+    assert.equal((await rpc("status", { workspaceId })).routingEnabled, true);
+    const next = await client.createAgent({ workspaceId, cwd, provider: "codex", model: "gpt-5.4", title: "Safehouse re-enabled fixture", providerOptions });
+    assert.equal(next.provider, "codex-safehouse");
+    assert.equal(next.currentModeId, "full-access");
+    evidence.routing.reenabledAgentId = next.id;
   }
   evidence.policyHash = before;
   evidence.result = "passed";

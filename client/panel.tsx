@@ -14,6 +14,8 @@ import {
 } from "../shared/contracts";
 import { emptyPolicy, renderPolicy, type Policy } from "../shared/policy";
 
+export const routingErrors = new Map<string, string>();
+
 type Status = Awaited<
   ReturnType<
     ReturnType<typeof useRpc<typeof statusRpc.input, typeof statusRpc.output>>
@@ -39,6 +41,7 @@ export function SafehousePanel({
     reload = useRpc(reloadRpc);
   const [data, setData] = useState<Status | null>(null),
     [error, setError] = useState(""),
+    [routingError, setRoutingError] = useState(""),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const [raw, setRaw] = useState(""),
@@ -68,7 +71,10 @@ export function SafehousePanel({
     const poll = async () => {
       try {
         const next = await getStatus({ workspaceId });
-        if (active) setData(next);
+        if (active) {
+          setData(next);
+          setRoutingError(routingErrors.get(workspaceId) ?? "");
+        }
       } catch (e) {
         if (active) setError(String(e));
       }
@@ -153,13 +159,16 @@ export function SafehousePanel({
           {data?.cwd}
         </Text>
       </View>
-      {error ? (
+      <Text style={muted}>
+        Applies to new agents in this workspace across clients. Explicit Safehouse providers always use Safehouse. Existing agents keep their provider.
+      </Text>
+      {error || routingError ? (
         <Text
           accessibilityRole="alert"
           style={{ color: colors.statusDanger }}
           selectable
         >
-          {error}
+          {error || routingError}
         </Text>
       ) : null}
       {message ? (
@@ -181,7 +190,7 @@ export function SafehousePanel({
           {!data.configured ? (
             <View style={{ gap: 8 }}>
               <Text style={text}>
-                Configure native provider variants on this daemon.
+                Configure provider variants on this daemon.
               </Text>
               {button(
                 "Set up providers",
@@ -197,7 +206,9 @@ export function SafehousePanel({
               <Text style={muted}>
                 {data.raw === null
                   ? "Create a .safehouse policy to sandbox new agents in this workspace."
-                  : "New agents use the workspace .safehouse policy automatically. Review access to inspect or edit it."}
+                  : data.routingEnabled
+                    ? "New ordinary agents use the workspace .safehouse policy. Review access to inspect or edit it."
+                    : "Automatic routing is off. Use the workspace header menu to enable it."}
               </Text>
               <Text style={muted}>
                 The workspace has read and write access. Additional grants

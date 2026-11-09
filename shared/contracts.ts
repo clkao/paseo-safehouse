@@ -7,8 +7,9 @@ export const statusRpc = defineRpc({
   output: z.object({
     cwd: z.string(),
     platform: z.string(),
-    state: z.enum(["unsupported", "setup", "absent", "invalid", "ready"]),
+    state: z.enum(["unsupported", "setup", "absent", "invalid", "ready", "off"]),
     configured: z.boolean(),
+    routingEnabled: z.boolean(),
     raw: z.string().nullable(),
     revision: z.string(),
     digest: z.string().nullable(),
@@ -26,6 +27,11 @@ export const statusRpc = defineRpc({
       }),
     ),
   }),
+});
+export const routingRpc = defineRpc({
+  name: "safehouse.set-workspace-routing",
+  input: workspace.extend({ enabled: z.boolean() }),
+  output: z.object({ enabled: z.boolean() }),
 });
 export const setupRpc = defineRpc({
   name: "safehouse.setup",
@@ -61,9 +67,10 @@ export const reloadRpc = defineRpc({
 });
 export const headerLabel = (state: string) =>
   ({
-    ready: "Safehouse on",
+    ready: "Safehouse auto on",
     invalid: "Safehouse error",
-    absent: "Safehouse off",
+    absent: "Safehouse auto off",
+    off: "Safehouse auto off",
     unsupported: "Safehouse unavailable",
     setup: "Safehouse setup",
   })[state] ?? "Safehouse checking";
