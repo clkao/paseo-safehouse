@@ -2,7 +2,7 @@
 
 Workspace access policies for Paseo agents on macOS.
 
-The plugin uses a workspace’s existing `.safehouse` policy automatically.
+The plugin uses a workspace’s existing `.safehouse` policy automatically unless you disable automatic routing in the workspace header.
 Use Paseo’s normal provider picker to start sandboxed agents. Review access when you want to inspect or edit the policy.
 The workspace policy applies across supported providers while Paseo manages conversations, model selection, and resume.
 
@@ -11,14 +11,16 @@ The workspace policy applies across supported providers while Paseo manages conv
 ## Workflow
 
 1. Open a workspace that contains `.safehouse`.
-2. The workspace header shows **Safehouse on** when providers are configured and the policy resolves successfully.
+2. The workspace header shows **Safehouse auto on** when providers are configured and the policy resolves successfully.
 3. Select a provider and model, then start an agent.
 4. To inspect or change access, open **Safehouse**, choose **Review access**, and save edits with **Save policy**.
 5. To apply policy changes to an existing agent, reload that agent.
 
-Without `.safehouse`, the header shows **Safehouse off**. The panel can create a policy from directory grants and optional capabilities.
-A workspace header menu for enabling or disabling Safehouse on new launches is planned.
-Its choice will apply across clients until changed; it cannot identify a particular draft.
+The header menu offers **Enable automatic Safehouse**, **Disable automatic Safehouse**, and **Review policy**.
+The choice persists across clients for this workspace. The header shows **Safehouse auto off** after you disable automatic routing.
+Explicit Safehouse providers remain sandboxed. Existing agents keep their provider and conversation.
+Without a policy or saved choice, new ordinary agents retain native behavior.
+Explicit enable requires a valid `.safehouse` policy. The panel can create one from directory grants and optional capabilities.
 Per-draft controls remain a [future API opportunity](docs/design.md#future-upstream-api-opportunities).
 
 Safehouse restricts the agent process and its children. The Paseo daemon remains outside that sandbox.
@@ -31,6 +33,9 @@ The daemon host must run macOS. Pi, Claude, and Codex passed initial live sandbo
 The plugin selects Codex **Full Access** automatically for Safehouse launches.
 This disables Codex’s inner sandbox and approval prompts.
 Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
+Setup also wraps explicit command arrays for supported built-in adapters, their direct derivatives, and generic custom ACP providers.
+Arguments retain their literal values. Unsupported configurations fail with an instruction to disable automatic routing.
+The failed launch never retries outside Safehouse. A later ordinary launch requires your explicit workspace choice.
 
 Model discovery runs in a separate Safehouse process with no workspace grants.
 Use the ordinary Pi provider in Paseo’s picker. It loads native model configuration before Safehouse routing.

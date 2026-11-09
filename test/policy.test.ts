@@ -17,6 +17,8 @@ import {
 } from "../server/policy";
 import {
   routeCreation,
+  setWorkspaceRouting,
+  setup,
   variant,
   prepareOpening,
   status,
@@ -156,13 +158,15 @@ test(
       guard: "/fixture/guard.sb",
     });
     const requestedCatalogs: string[] = [];
+    const running = [{ agent: { id: "existing", workspaceId: "fixture", provider: "pi-safehouse", providerOptions: { keep: true } } }];
+    const runningBefore = JSON.stringify(running);
     const paseo = {
       workspaces: {
         ref: (cwd: string) => ({
           refresh: async () => ({ workspaceDirectory: cwd }),
         }),
       },
-      agents: { list: async () => ({ entries: [] }) },
+      agents: { list: async () => ({ entries: running }) },
       config: {
         get: async () => ({
           config: { providers: entries },
@@ -258,6 +262,38 @@ test(
     assert.equal((await status(paseo, workspaces[0])).state, "invalid");
     assert.equal(codexRequest.config.modeId, "auto");
     await fs.writeFile(path.join(workspaces[0], ".safehouse"), "");
+    // Persistent shared selection never changes a running agent or provider entry.
+    const originalProviders = JSON.stringify(entries);
+    const originalPolicy = await fs.readFile(path.join(workspaces[0], ".safehouse"), "utf8");
+    await setWorkspaceRouting(paseo, workspaces[0], false);
+    const alias = path.join(base, "alias");
+    await fs.symlink(workspaces[0], alias);
+    assert.equal((await status(paseo, alias)).routingEnabled, false);
+    const secondClient = { ...paseo };
+    const freshModulePath = "../server/service.ts?second-client";
+    const freshService = await import(freshModulePath);
+    assert.equal((await freshService.status(secondClient, workspaces[0])).routingEnabled, false);
+    assert.equal((await status(secondClient, workspaces[0])).routingEnabled, false);
+    assert.equal((await status(secondClient, workspaces[1])).routingEnabled, true);
+    assert.equal(await routeCreation(codexRequest, secondClient), codexRequest);
+    assert.equal((await routeCreation({ config: { ...codexRequest.config, provider: variant("codex") } }, paseo)).config.provider, variant("codex"));
+    await fs.writeFile(path.join(workspaces[0], ".safehouse"), "invalid=policy\n");
+    assert.equal(await routeCreation(codexRequest, paseo), codexRequest);
+    assert.equal((await status(paseo, workspaces[0])).state, "off");
+    assert.match((await status(paseo, workspaces[0])).error!, /unsupported setting/);
+    await fs.writeFile(path.join(workspaces[0], ".safehouse"), originalPolicy);
+    await setWorkspaceRouting(paseo, workspaces[0], true);
+    assert.equal((await routeCreation(codexRequest, paseo)).config.provider, variant("codex"));
+    assert.equal(JSON.stringify(entries), originalProviders);
+    assert.equal(JSON.stringify(running), runningBefore);
+    assert.equal(await fs.readFile(path.join(workspaces[0], ".safehouse"), "utf8"), originalPolicy);
+    const choiceFile = path.join(root, "workspaces", `${hash(workspaces[0])}.json`);
+    for (const corrupt of [null, {}, { enabled: "false" }]) {
+      await atomicJson(choiceFile, corrupt);
+      await assert.rejects(routeCreation(codexRequest, paseo), /routing state/);
+    }
+    await setWorkspaceRouting(paseo, workspaces[0], false);
+    await setWorkspaceRouting(paseo, workspaces[0], true);
     const originalEntry = entries[variant("codex")];
     entries[variant("codex")] = {
       ...originalEntry,
@@ -269,6 +305,7 @@ test(
     );
     assert.equal(codexRequest.config.modeId, "auto");
     entries[variant("codex")] = originalEntry;
+    await setWorkspaceRouting(paseo, workspaces[0], false);
     const opening = (cwd: string, id: string) => ({
       agentId: id,
       workspaceId: null,
@@ -296,11 +333,16 @@ test(
     assert.ok(!firstRaw.includes(workspaces[1]));
     assert.equal(first.env.SAFEHOUSE_ADD_DIRS, "");
     await fs.rm(path.join(workspaces[0], ".safehouse"));
-    assert.equal((await status(paseo, workspaces[0])).state, "absent");
+    assert.equal((await status(paseo, workspaces[0])).state, "off");
     const ordinary = {
       config: { cwd: workspaces[0], provider: "pi", model: "fixture/model" },
     };
     assert.equal(await routeCreation(ordinary, paseo), ordinary);
+    await setWorkspaceRouting(paseo, workspaces[0], true);
+    await assert.rejects(routeCreation(ordinary, paseo), /missing/);
+    assert.equal((await status(paseo, workspaces[0])).state, "invalid");
+    const ordinaryOpening = { ...opening(workspaces[0], "ordinary"), provider: "pi", reason: "resume" as const };
+    assert.equal(await prepareOpening(ordinaryOpening, paseo), ordinaryOpening);
     await assert.rejects(
       prepareOpening(
         { ...opening(workspaces[0], "agent-0"), reason: "resume" },
@@ -381,4 +423,43 @@ test("ordinary path bytes and symlink targets retain isolated snapshots", async 
   assert.equal(await fs.readFile(path.join(first, "profile-0.sb"), "utf8"), content);
   assert.equal(await fs.readFile(path.join(second, "profile-0.sb"), "utf8"), content);
   assert.equal(await fs.readFile(path.join(cwd, ".safehouse"), "utf8"), raw);
+});
+
+test("setup wraps configured providers, preserves ordinary entries and rejects drift", { skip: process.platform !== "darwin" }, async (t) => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-setup-"));
+  const previousHome = process.env.PASEO_HOME;
+  process.env.PASEO_HOME = base;
+  t.after(async () => {
+    if (previousHome === undefined) delete process.env.PASEO_HOME;
+    else process.env.PASEO_HOME = previousHome;
+    await fs.rm(base, { recursive: true, force: true });
+  });
+  await atomicJson(path.join(base, "config.json"), { daemon: { listen: "127.0.0.1:45678" }, plugins: { "paseo-safehouse": { path: base } } });
+  const providers: Record<string, any> = {
+    copilot: { command: [process.execPath, "two words"], env: { BASE: "yes" }, disallowedTools: ["base-tool"], options: { key: "base" } },
+    custom: { extends: "copilot", label: "Custom", env: { CUSTOM: "yes" }, disallowedTools: ["custom-tool"], models: [{ id: "fixture", label: "Fixture" }] },
+    generic: { extends: "acp", label: "Generic", command: [process.execPath, "quote's", "$(touch forbidden)"] },
+    plugin: { command: [process.execPath] },
+  };
+  const originals = JSON.parse(JSON.stringify(providers));
+  const paseo = {
+    config: { get: async () => ({ config: { providers } }), patch: async (patch: any) => Object.assign(providers, patch.providers) },
+  } as unknown as Parameters<typeof setup>[0];
+  await setup(paseo);
+  for (const id of Object.keys(originals)) assert.deepEqual(providers[id], originals[id]);
+  assert.equal(providers["custom-safehouse"].extends, "copilot");
+  assert.deepEqual(providers["custom-safehouse"].disallowedTools, ["custom-tool"]);
+  assert.deepEqual(providers["custom-safehouse"].models, originals.custom.models);
+  assert.equal(providers["generic-safehouse"].extends, "acp");
+  assert.equal(providers["plugin-safehouse"], undefined);
+  await fs.writeFile(path.join(base, ".safehouse"), "");
+  const request = { config: { cwd: base, provider: "custom", model: "fixture", modeId: "auto", providerOptions: { own: true } } };
+  const result = await routeCreation(request, paseo);
+  assert.equal(result.config.provider, "custom-safehouse");
+  assert.deepEqual(result.config.providerOptions, { own: true });
+  assert.equal(result.config.modeId, "auto");
+  await assert.rejects(routeCreation({ config: { ...request.config, provider: "plugin" } }, paseo), /Disable automatic Safehouse/);
+  providers.copilot.env.BASE = "changed";
+  await assert.rejects(routeCreation(request, paseo), /Configure Safehouse again/);
+  assert.equal(request.config.provider, "custom");
 });
