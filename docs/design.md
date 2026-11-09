@@ -101,9 +101,10 @@ The beta targets Paseo 0.15.3 and Safehouse 0.12.0. Earlier evidence used Paseo 
 
 The opening hook cannot change executable arguments. Provider configuration supplies that execution mechanism.
 Creation hooks exclude Paseo’s internal agents. The beta must attempt the selected harness inside Safehouse, including harnesses outside the initial three adapters.
-Generic launch support is not implemented yet; current code rejects unrecognized providers.
+The local candidate wraps configured command arrays when the public adapter API preserves their semantics.
+Providers without a usable exposed command fail with an explicit recovery path.
 A failed sandboxed launch must report the failure without an unsandboxed retry.
-The user can explicitly disable Safehouse for subsequent launches through the planned workspace menu.
+The user can explicitly disable Safehouse for subsequent launches through the workspace header menu.
 
 ### Policy snapshots
 
@@ -168,8 +169,10 @@ Detached descendants can retain the previous sandbox policy.
 
 Safehouse restricts the harness process and its children. The Paseo daemon remains outside that sandbox.
 Daemon-side tools, MCP services, and external services have separate authority.
-The implementation disables agent-side Paseo tools and rejects explicit or hook-local MCP contributions.
-Those checks do not cover MCP contributions from other plugins.
+The plugin disables agent-side Paseo control tools.
+The accepted beta behavior permits additional MCP services with a warning.
+The local candidate still contains explicit and hook-local MCP rejection. The capability-boundary task must remove this before publication.
+Hook-local checks cannot establish a global MCP restriction.
 Additional MCP services can provide access outside the process sandbox. Users must consider each service's authority.
 Other enabled plugins are not prohibited.
 Harness-native services and enabled credentials retain their own authority.

@@ -16,7 +16,7 @@ The commissioned development workflow is `docs/dev/README.md`. Mutable task stat
 ## Checks and delivery
 
 Run `npm run typecheck` and `npm test` for relevant code changes. The macOS test needs an installed Safehouse binary.
-The checked runtime is Paseo 0.15.2 and Safehouse 0.12.0. Development dependencies are pinned by `package-lock.json`.
+The beta target and current checked runtime are Paseo 0.15.3 and Safehouse 0.12.0. Development dependencies are pinned by `package-lock.json`.
 Use a working Node installation. The commissioning environment used Node 24.22.1 through fnm.
 
 Security-boundary changes require failing regressions and independent validation. Other changes use checks proportional to their effect.
