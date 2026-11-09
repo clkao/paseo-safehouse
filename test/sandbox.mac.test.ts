@@ -259,7 +259,7 @@ a('child',()=>{fs.mkdirSync(${q(path.join(cwd, "made"))},{recursive:true});fs.wr
 fs.mkdirSync(${q(staged)});fs.writeFileSync(${q(path.join(staged, "extra.sb"))},${q(f.payload)});a('replace',()=>fs.renameSync(${q(staged)},${q(parent)}));` };
   };
   // Unrecorded statements stage attacker files through ordinary workspace writes.
-  const cases: Record<string, (f: Fixture) => Promise<{ raw: string; watch: string[]; attack: string }>> = {
+  const cases: Record<string, (f: Fixture) => Promise<{ raw: string; watch: string[]; attack: string; expect?: Record<string, string> }>> = {
     "symlinked grant": async (f) => {
       const link = path.join(f.cwd, "vendor");
       await fs.symlink(f.lib, link);
@@ -282,9 +282,18 @@ fs.mkdirSync(${q(staged)});fs.writeFileSync(${q(path.join(staged, "extra.sb"))},
       return { raw: "add-dirs=./hop/inner\n", watch: [hop, hop2, real, inner], attack: `fs.mkdirSync(${q(evil)});fs.symlinkSync(${q(f.secret)},${q(path.join(evil, "inner"))});` +
         retarget(hop, evil) + retarget(hop2, evil) + retarget(inner, f.secret) + `a('rename real',()=>fs.renameSync(${q(real)},${q(`${real}.old`)}));` };
     },
+    // A granted file keeps content writes. Replacing its directory entry would move the grant to another file.
+    "read-write file grant": async (f) => {
+      const [notes, fixed] = ["notes.txt", "fixed.txt"].map((name) => path.join(f.shared, name)), canary = path.join(f.secret, "canary"), staged = path.join(f.cwd, "staged");
+      for (const file of [notes, fixed]) await fs.writeFile(file, "fixed");
+      return { raw: "add-dirs=../shared/notes.txt\nadd-dirs-ro=../shared/fixed.txt\n", watch: [notes, fixed], expect: { content: "data+more", "read-only read": "fixed" },
+        attack: `a('content',()=>{fs.writeFileSync(${q(notes)},'data');fs.appendFileSync(${q(notes)},'+more');return fs.readFileSync(${q(notes)},'utf8')});
+a('read-only read',()=>fs.readFileSync(${q(fixed)},'utf8'));a('read-only write',()=>fs.writeFileSync(${q(fixed)},'changed'));
+fs.symlinkSync(${q(canary)},${q(staged)});a('rename onto',()=>fs.renameSync(${q(staged)},${q(notes)}));` + retarget(notes, canary) };
+    },
   };
   for (const [name, build] of Object.entries(cases)) await t.test(name, async (t) => {
-    const f = await fixture(name), { raw, watch, attack } = await build(f), source = path.join(f.cwd, ".safehouse");
+    const f = await fixture(name), { raw, watch, attack, expect } = await build(f), source = path.join(f.cwd, ".safehouse");
     await fs.writeFile(source, raw);
     const identities = () => Promise.all(watch.map(async (entry) => {
       const stat = await fs.lstat(entry).catch(() => null);
@@ -296,7 +305,7 @@ fs.mkdirSync(${q(staged)});fs.writeFileSync(${q(path.join(staged, "extra.sb"))},
     const observed = { attacked, fresh: await f.launch(await prepareSnapshot(f.root, after), f.access), retained: await f.launch(retained, f.access),
       source: await fs.readFile(source, "utf8"), digestChanged: after.digest !== before.digest, identitiesChanged: !isDeepStrictEqual(await identities(), protectedIdentities) };
     t.diagnostic(JSON.stringify(observed));
-    assert.deepEqual(observed, { attacked: Object.fromEntries(Object.keys(attacked).map((key) => [key, allowed[key as keyof typeof allowed] ?? "EPERM"])),
+    assert.deepEqual(observed, { attacked: Object.fromEntries(Object.keys(attacked).map((key) => [key, expect?.[key] ?? allowed[key as keyof typeof allowed] ?? "EPERM"])),
       fresh: allowed, retained: allowed, source: raw, digestChanged: false, identitiesChanged: false });
   });
   await t.test("ordinary grants, read-only grants, profiles and symlink inputs keep their access", async () => {
