@@ -161,17 +161,14 @@ Fixed final restrictions protect plugin state, snapshots, plugin code, and the d
 Changing a source file after preparation cannot change the prepared snapshot.
 The opening hook resolves the source again before preparing the snapshot. Later source changes affect only subsequent processes.
 
-Resolution follows each workspace, grant, and profile path one component at a time.
-It records every symbolic link on the way, every link target, and every canonical ancestor directory.
-The snapshot denies the managed process writes to each recorded directory entry, so the process cannot rename, replace, or retarget a component that decides where the next resolution leads.
-Each denial names one entry. Files and directories beneath a granted directory stay writable.
-A granted file keeps content writes, but the managed process cannot delete or replace it.
-A tool that saves by writing a temporary file and renaming it over the granted file gets a permission error. Grant the containing directory when a tool saves that way.
-
-Safehouse trims whitespace around each configured path and resolves grants again at launch.
+Safehouse trims whitespace around each configured path.
 Resolution therefore rejects a workspace or grant whose canonical path begins or ends with whitespace, and the policy file and editor reject a quoted path with edge whitespace.
-It also rejects a recorded component whose name contains a control character other than a tab, because the sandbox profile cannot name it.
-Snapshot preparation fails when the workspace or a grant no longer resolves to the path that policy resolution recorded.
+
+Like Safehouse run from a shell, the plugin fixes a process's access when that process launches, and every launch and reload resolves the policy's paths again.
+The snapshot denies the managed process writes to `.safehouse` and to each resolved profile file at its path.
+It does not stop the process from changing other files, links, or folders it can write, so a later launch or reload at the same paths can resolve to a different policy or grant.
+That includes a link or folder on the way to a grant or profile, a granted file, the workspace folder itself, and a symbolic link through which the workspace was opened.
+A later launch uses whatever the paths lead to then.
 
 ### Provider discovery
 

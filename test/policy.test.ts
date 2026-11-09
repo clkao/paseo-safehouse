@@ -495,30 +495,10 @@ test("paths with edge whitespace are rejected instead of trimmed", async (t) => 
   for (const raw of ['add-dirs="/a "', "add-dirs-ro=' /a'", 'append-profile="x.sb "'])
     assert.throws(() => parsePolicy(raw), /Line 1: .*whitespace/);
   assert.throws(() => renderPolicy({ ...emptyPolicy(), readWrite: ["/a "] }), /whitespace/);
+  // An invisible edge character is escaped, so the quoted path shows it.
+  assert.throws(() => renderPolicy({ ...emptyPolicy(), readWrite: ["/a\u00a0"] }), /whitespace: "\/a\\u00a0"$/);
+  await assert.rejects(prepareSnapshot(root, { ...policy, readWrite: ["/a\ufeff"] }), /whitespace: "\/a\\ufeff"$/);
   assert.equal(renderPolicy({ ...emptyPolicy(), readWrite: ["/a b"] }), "# Safehouse access for this workspace.\nadd-dirs=/a b\n");
-});
-
-test("snapshots restrict every component of a resolved link chain without recursion", async (t) => {
-  const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-components-")));
-  t.after(() => fs.rm(base, { recursive: true, force: true }));
-  const cwd = path.join(base, "workspace"), q = JSON.stringify;
-  const [hop, hop2, real, lib, profiles] = ["hop", "hop2", "real", "lib", "profiles"].map((name) => path.join(cwd, name));
-  const inner = path.join(real, "inner"), profile = path.join(profiles, "extra.sb");
-  for (const dir of [real, lib, profiles]) await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(profile, "; profile\n");
-  // hop is a non-final link to another link; the final component is a link in the resolved directory.
-  await fs.symlink(lib, inner);
-  await fs.symlink(real, hop2);
-  await fs.symlink("hop2", hop);
-  const policy = await resolvePolicy("add-dirs=./hop/inner\nappend-profile=./profiles/extra.sb\n", cwd, []);
-  assert.deepEqual(policy.readWrite, [lib]);
-  const guard = await fs.readFile(path.join(await prepareSnapshot(path.join(base, "state"), policy), "workspace.sb"), "utf8");
-  for (const component of [path.dirname(base), base, cwd, hop, hop2, real, inner, lib, profiles, profile])
-    assert.ok(guard.includes(`(deny file-write* (literal ${q(component)}))\n`), component);
-  // Only source contents are protected recursively. A component rule must not cover its children.
-  assert.deepEqual(guard.match(/\(subpath .*\)/g), [path.join(cwd, ".safehouse"), profile].map((p) => `(subpath ${q(p)}))`));
-  await fs.symlink(lib, path.join(cwd, "ctl\u0001link"));
-  await assert.rejects(resolvePolicy("add-dirs=./ctl\u0001link\n", cwd, []), /control characters/);
 });
 
 test("setup wraps configured providers, preserves ordinary entries and rejects drift", { skip: process.platform !== "darwin" }, async (t) => {

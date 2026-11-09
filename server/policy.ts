@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { parsePolicy } from "../shared/policy";
+import { parsePolicy, quotePath } from "../shared/policy";
 
 export const run = promisify(execFile);
 export const hash = (text: string) =>
@@ -132,41 +132,15 @@ function policyPath(value: string, exact = true) {
   if (/[:\r\n\0]/.test(value))
     throw new Error("Safehouse paths cannot contain colons, line breaks, or NUL.");
   if (exact && value !== value.trim())
-    throw new Error(`Safehouse cannot grant a path that begins or ends with whitespace: ${JSON.stringify(value)}`);
+    throw new Error(`Safehouse cannot grant a path that begins or ends with whitespace: ${quotePath(value)}`);
   return value;
-}
-// Records each directory entry that decides where a path leads: every link, link target and canonical ancestor.
-// A granted file is recorded apart because it keeps its content writes.
-async function tracePath(input: string, components: Set<string>, expected?: string, files?: Set<string>) {
-  const pending = input.split(path.sep).filter(Boolean);
-  let current: string = path.sep;
-  for (let links = 0; pending.length; ) {
-    const name = pending.shift()!;
-    if (name === ".") continue;
-    const next = name === ".." ? path.dirname(current) : path.join(current, name);
-    const stat = name === ".." ? null : await fs.lstat(next);
-    if (stat?.isSymbolicLink()) {
-      if (++links > 40)
-        throw new Error(`Safehouse path has too many symbolic links: ${input}`);
-      const target = await fs.readlink(next);
-      components.add(next);
-      if (path.isAbsolute(target)) current = path.sep;
-      pending.unshift(...target.split(path.sep).filter(Boolean));
-    } else if ((current = await fs.realpath(next)) !== path.sep)
-      (files && stat && !stat.isDirectory() && !pending.length ? files : components).add(current);
-  }
-  if (current !== (expected ?? (await fs.realpath(input))))
-    throw new Error(`Safehouse path changed during resolution: ${input}`);
-  return current;
 }
 export async function resolvePolicy(
   raw: string,
   cwd: string,
   supported: string[],
 ) {
-  const components = new Set<string>(), files = new Set<string>();
-  const workspace = policyPath(await canonicalDirectory(cwd));
-  cwd = await tracePath(cwd, components, workspace);
+  cwd = policyPath(await canonicalDirectory(cwd));
   const parsed = parsePolicy(raw);
   for (const feature of parsed.enable)
     if (!supported.includes(feature))
@@ -178,7 +152,8 @@ export async function resolvePolicy(
         : value.startsWith("~/")
           ? path.join(homedir(), value.slice(2))
           : value;
-    return policyPath(await tracePath(path.resolve(cwd, expanded), components, undefined, grant ? files : undefined), grant);
+    const real = await fs.realpath(path.resolve(cwd, expanded));
+    return policyPath(real, grant);
   };
   const readOnly = [
     ...new Set(await Promise.all(parsed.readOnly.map((value) => resolve(value)))),
@@ -201,10 +176,6 @@ export async function resolvePolicy(
       return { path: file, content };
     }),
   );
-  // The sandbox profile syntax cannot express other control characters, so such an entry could not be protected.
-  const unprotected = [...components, ...files].find((p) => /[\0-\x08\x0a-\x1f\x7f]/.test(p));
-  if (unprotected)
-    throw new Error(`Safehouse cannot protect a path containing control characters: ${JSON.stringify(unprotected)}`);
   const policy = {
     cwd,
     raw,
@@ -213,12 +184,7 @@ export async function resolvePolicy(
     enable: [...new Set(parsed.enable)],
     profiles,
   };
-  return {
-    ...policy,
-    components: [...components].sort(),
-    files: [...files].filter((p) => !components.has(p)).sort(),
-    digest: hash(JSON.stringify(policy)),
-  };
+  return { ...policy, digest: hash(JSON.stringify(policy)) };
 }
 export type ResolvedPolicy = Awaited<ReturnType<typeof resolvePolicy>>;
 export async function loadPolicy(cwd: string, features: string[]) {
@@ -233,8 +199,6 @@ export function guardProfile(
   readDenied: string[],
   writeDenied: string[],
   ports: number[],
-  entryDenied: string[] = [],
-  fileDenied: string[] = [],
 ) {
   for (const port of ports)
     if (!Number.isInteger(port) || port < 1 || port > 65535)
@@ -253,14 +217,6 @@ export function guardProfile(
       ...[...new Set(writeDenied)].map(
         (p) => `(deny file-write* (subpath ${q(p)}))`,
       ),
-      // A literal rule protects one directory entry and leaves writes beneath it to the grants.
-      ...[...new Set(entryDenied)].map(
-        (p) => `(deny file-write* (literal ${q(p)}))`,
-      ),
-      // A granted file keeps its content writes. Only deleting or replacing its entry is denied.
-      ...[...new Set(fileDenied)].map(
-        (p) => `(deny file-write-unlink file-write-create (literal ${q(p)}))`,
-      ),
     ].join("\n") + "\n"
   );
 }
@@ -271,10 +227,6 @@ export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
   policy.profiles.forEach((profile) => policyPath(profile.path, false));
   const parent = path.join(root, "snapshots");
   const prefix = policyPath(path.join(parent, `${policy.digest.slice(0, 12)}-`));
-  // Safehouse resolves each granted path again at launch. A path that no longer names itself would grant its new target.
-  for (const p of [policy.cwd, ...policy.readOnly, ...policy.readWrite])
-    if ((await fs.realpath(p).catch(() => null)) !== p)
-      throw new Error(`Safehouse path changed after policy resolution: ${p}`);
   await fs.mkdir(parent, { recursive: true, mode: 0o700 });
   const dir = await fs.mkdtemp(prefix);
   try {
@@ -299,8 +251,6 @@ export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
           ...policy.profiles.map((p) => p.path),
         ],
         [],
-        policy.components,
-        policy.files,
       ),
     );
     lines.push(`append-profile=${guard}`);

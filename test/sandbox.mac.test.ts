@@ -5,7 +5,6 @@ import path from "node:path";
 import os from "node:os";
 import http from "node:http";
 import { once } from "node:events";
-import { isDeepStrictEqual } from "node:util";
 import { renderBootstrap } from "../server/launch";
 import {
   findExecutable,
@@ -225,7 +224,7 @@ console.log(JSON.stringify(result));if(process.argv.includes('--fail'))process.e
   t.diagnostic("Configured copilot-derived command: allowed workspace read/write, denied sibling read/write, literal argv; exit 23 preserved with no outside marker. Direct negative control accessed sibling.");
 });
 
-test("fresh snapshots keep policy authority against managed-process path changes", { skip: process.platform !== "darwin" }, async (t) => {
+test("a launch reaches the paths its policy names and no trimmed sibling", { skip: process.platform !== "darwin" }, async (t) => {
   const binary = await findExecutable("safehouse");
   assert.ok(binary, "Safehouse must be installed");
   const base = await fs.mkdtemp(path.join(os.homedir(), ".safehouse-authority-"));
@@ -242,72 +241,11 @@ test("fresh snapshots keep policy authority against managed-process path changes
     const launch = async (snapshot: string, body: string): Promise<Record<string, string>> => JSON.parse((await run("/bin/sh", [bootstrap, "-e",
       `const fs=require('node:fs');const r={};const a=(k,f)=>{try{r[k]=f()??'allowed'}catch(e){r[k]=e.code}};${body};console.log(JSON.stringify(r))`,
     ], { cwd, env: policyEnvironment(process.env, snapshot), timeout: 45000 })).stdout);
-    // Child writes sit beneath protected components: the workspace, a new directory and the granted directory.
     const access = `a('secret',()=>fs.readFileSync(${q(path.join(secret, "canary"))},'utf8'));a('workspace',()=>fs.writeFileSync(${q(path.join(cwd, "ordinary"))},'ok'));
 a('child',()=>{fs.mkdirSync(${q(path.join(cwd, "made"))},{recursive:true});fs.writeFileSync(${q(path.join(cwd, "made", "file"))},'ok');fs.writeFileSync(${q(path.join(lib, "file"))},'ok')});`;
-    const payload = `(allow file-read* file-write* (subpath ${q(secret)}))\n`;
-    return { dir, cwd, root, secret, shared, lib, launch, access, payload };
+    return { dir, cwd, root, secret, shared, lib, launch, access };
   };
-  type Fixture = Awaited<ReturnType<typeof fixture>>;
   const allowed = { secret: "EPERM", workspace: "allowed", child: "allowed" };
-  const retarget = (link: string, target: string) => `a(${q(`unlink ${path.basename(link)}`)},()=>fs.unlinkSync(${q(link)}));a(${q(`retarget ${path.basename(link)}`)},()=>fs.symlinkSync(${q(target)},${q(link)}));`;
-  const profileParent = async (f: Fixture, parent: string, raw: string) => {
-    const profile = path.join(parent, "extra.sb"), staged = `${parent}.new`;
-    await fs.mkdir(parent);
-    await fs.writeFile(profile, "; benign\n");
-    return { raw, watch: [parent, profile], attack: `a('direct',()=>fs.writeFileSync(${q(profile)},${q(f.payload)}));a('rename',()=>fs.renameSync(${q(parent)},${q(`${parent}.old`)}));
-fs.mkdirSync(${q(staged)});fs.writeFileSync(${q(path.join(staged, "extra.sb"))},${q(f.payload)});a('replace',()=>fs.renameSync(${q(staged)},${q(parent)}));` };
-  };
-  // Unrecorded statements stage attacker files through ordinary workspace writes.
-  const cases: Record<string, (f: Fixture) => Promise<{ raw: string; watch: string[]; attack: string; expect?: Record<string, string> }>> = {
-    "symlinked grant": async (f) => {
-      const link = path.join(f.cwd, "vendor");
-      await fs.symlink(f.lib, link);
-      return { raw: "add-dirs=./vendor\n", watch: [link], attack: retarget(link, f.secret) };
-    },
-    "symlinked profile": async (f) => {
-      const link = path.join(f.cwd, "vendor"), benign = path.join(f.dir, "benign.sb"), staged = path.join(f.cwd, "payload.sb");
-      await fs.writeFile(benign, "; benign\n");
-      await fs.symlink(benign, link);
-      return { raw: "append-profile=./vendor\n", watch: [link], attack: `fs.writeFileSync(${q(staged)},${q(f.payload)});` + retarget(link, staged) };
-    },
-    "profile parent replacement": (f) => profileParent(f, path.join(f.cwd, "profiles"), "append-profile=./profiles/extra.sb\n"),
-    "profile parent beneath an outside grant": (f) => profileParent(f, path.join(f.shared, "profiles"), "add-dirs=../shared\nappend-profile=../shared/profiles/extra.sb\n"),
-    "chained intermediate symlinks": async (f) => {
-      const [hop, hop2, real, evil] = ["hop", "hop2", "real", "evil"].map((name) => path.join(f.cwd, name)), inner = path.join(real, "inner");
-      await fs.mkdir(real);
-      await fs.symlink(f.lib, inner);
-      await fs.symlink(real, hop2);
-      await fs.symlink(hop2, hop);
-      return { raw: "add-dirs=./hop/inner\n", watch: [hop, hop2, real, inner], attack: `fs.mkdirSync(${q(evil)});fs.symlinkSync(${q(f.secret)},${q(path.join(evil, "inner"))});` +
-        retarget(hop, evil) + retarget(hop2, evil) + retarget(inner, f.secret) + `a('rename real',()=>fs.renameSync(${q(real)},${q(`${real}.old`)}));` };
-    },
-    // A granted file keeps content writes. Replacing its directory entry would move the grant to another file.
-    "read-write file grant": async (f) => {
-      const [notes, fixed] = ["notes.txt", "fixed.txt"].map((name) => path.join(f.shared, name)), canary = path.join(f.secret, "canary"), staged = path.join(f.cwd, "staged");
-      for (const file of [notes, fixed]) await fs.writeFile(file, "fixed");
-      return { raw: "add-dirs=../shared/notes.txt\nadd-dirs-ro=../shared/fixed.txt\n", watch: [notes, fixed], expect: { content: "data+more", "read-only read": "fixed" },
-        attack: `a('content',()=>{fs.writeFileSync(${q(notes)},'data');fs.appendFileSync(${q(notes)},'+more');return fs.readFileSync(${q(notes)},'utf8')});
-a('read-only read',()=>fs.readFileSync(${q(fixed)},'utf8'));a('read-only write',()=>fs.writeFileSync(${q(fixed)},'changed'));
-fs.symlinkSync(${q(canary)},${q(staged)});a('rename onto',()=>fs.renameSync(${q(staged)},${q(notes)}));` + retarget(notes, canary) };
-    },
-  };
-  for (const [name, build] of Object.entries(cases)) await t.test(name, async (t) => {
-    const f = await fixture(name), { raw, watch, attack, expect } = await build(f), source = path.join(f.cwd, ".safehouse");
-    await fs.writeFile(source, raw);
-    const identities = () => Promise.all(watch.map(async (entry) => {
-      const stat = await fs.lstat(entry).catch(() => null);
-      return [entry, stat?.ino, stat?.isSymbolicLink() ? await fs.readlink(entry) : null];
-    }));
-    const before = await resolvePolicy(raw, f.cwd, []), retained = await prepareSnapshot(f.root, before), protectedIdentities = await identities();
-    const attacked = await f.launch(retained, f.access + attack);
-    const after = await resolvePolicy(await fs.readFile(source, "utf8"), f.cwd, []);
-    const observed = { attacked, fresh: await f.launch(await prepareSnapshot(f.root, after), f.access), retained: await f.launch(retained, f.access),
-      source: await fs.readFile(source, "utf8"), digestChanged: after.digest !== before.digest, identitiesChanged: !isDeepStrictEqual(await identities(), protectedIdentities) };
-    t.diagnostic(JSON.stringify(observed));
-    assert.deepEqual(observed, { attacked: Object.fromEntries(Object.keys(attacked).map((key) => [key, expect?.[key] ?? allowed[key as keyof typeof allowed] ?? "EPERM"])),
-      fresh: allowed, retained: allowed, source: raw, digestChanged: false, identitiesChanged: false });
-  });
   await t.test("ordinary grants, read-only grants, profiles and symlink inputs keep their access", async () => {
     const f = await fixture("ordinary"), [readOnly, profiled] = ["read-only", "profiled"].map((name) => path.join(f.dir, name));
     for (const dir of [readOnly, profiled]) {
@@ -321,29 +259,6 @@ fs.symlinkSync(${q(canary)},${q(staged)});a('rename onto',()=>fs.renameSync(${q(
     const result = await f.launch(await prepareSnapshot(f.root, policy), f.access + `a('grantWrite',()=>fs.writeFileSync(${q(path.join(f.shared, "file"))},'ok'));` + probe("readOnly", readOnly) + probe("profile", profiled));
     assert.deepEqual(result, { ...allowed, grantWrite: "allowed", readOnlyRead: "fixture", readOnlyWrite: "EPERM", profileRead: "fixture", profileWrite: "EPERM" });
     assert.equal(await fs.readFile(path.join(f.shared, "file"), "utf8"), "ok");
-  });
-  // The change happens at the function boundary: after resolution returns and before the snapshot is prepared.
-  for (const [name, change] of Object.entries({
-    "an input link retargeted after resolution": async (f: Fixture, link: string) => {
-      await fs.rm(link);
-      await fs.symlink(f.secret, link);
-    },
-    "a resolved directory replaced after resolution": async (f: Fixture) => {
-      await fs.rename(f.shared, `${f.shared}.old`);
-      await fs.symlink(f.secret, f.shared);
-    },
-  })) await t.test(name, async (t) => {
-    const f = await fixture(name), link = path.join(f.cwd, "vendor"), resolvedFile = path.join(f.dir, "shared", "file");
-    await fs.symlink(f.shared, link);
-    const resolved = await resolvePolicy("add-dirs=./vendor\n", f.cwd, []);
-    await change(f, link);
-    const snapshot = await prepareSnapshot(f.root, resolved).catch((error: Error) => error);
-    t.diagnostic(snapshot instanceof Error ? `Preparation failed: ${snapshot.message}` : "Preparation succeeded");
-    if (snapshot instanceof Error) return assert.match(snapshot.message, /changed after policy resolution/);
-    const result = await f.launch(snapshot, `a('secret',()=>fs.readFileSync(${q(path.join(f.secret, "canary"))},'utf8'));a('resolved',()=>fs.writeFileSync(${q(resolvedFile)},'ok'));` + retarget(link, f.lib));
-    t.diagnostic(JSON.stringify(result));
-    assert.deepEqual(result, { secret: "EPERM", resolved: "allowed", "unlink vendor": "EPERM", "retarget vendor": "EPERM" });
-    await assert.rejects(fs.access(path.join(f.secret, "file")));
   });
   // Each exact directory has an independently named sibling that a trimmed value would name instead.
   for (const kind of ["workspace", "grant"]) await t.test(`${kind} path with trailing whitespace`, async (t) => {

@@ -57,6 +57,9 @@ export function parsePolicy(raw: string): Policy {
   });
   return result;
 }
+// Quotes a path with every character outside printable ASCII escaped, so an invisible edge character shows.
+export const quotePath = (value: string) =>
+  JSON.stringify(value).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 export function renderPolicy(policy: Policy): string {
   const lines = ["# Safehouse access for this workspace."];
   for (const [key, values] of [
@@ -76,7 +79,7 @@ export function renderPolicy(policy: Policy): string {
         );
       if (key !== "enable" && value !== value.trim())
         throw new Error(
-          `A path cannot begin or end with whitespace: ${JSON.stringify(value)}`,
+          `A path cannot begin or end with whitespace: ${quotePath(value)}`,
         );
       lines.push(`${key}=${value.trim()}`);
     }
