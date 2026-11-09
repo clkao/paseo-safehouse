@@ -81,6 +81,13 @@ These scope decisions control older task proposals. Revise task designs before t
 Creation-form contributions can add per-draft choices and readiness. Provider-wrapper, discovery, and final-capability hooks can simplify integration.
 These are not beta prerequisites. See [the design table](../design.md#future-upstream-api-opportunities) for current constraints and workarounds.
 
+## Local dependency storage
+
+Worktrees with the same package-lock.json share the main checkout's node_modules through a symlink.
+Check the lockfile before linking. Do not run npm ci or dependency updates through that symlink.
+If a task changes dependencies, give that worktree a separate installation first.
+Disposable daemon local-speech model caches are separate from Node dependencies and can consume hundreds of megabytes per daemon.
+
 ## Engineering posture
 
 This is a development prototype with security-sensitive enforcement paths.
