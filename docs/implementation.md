@@ -33,6 +33,37 @@ Configured replacement models do not eliminate that runtime because Pi exposes n
 The bootstrap supplies restricted catalog discovery when the session-opening hook does not run.
 The creation hook preserves the selected model or resolves the native provider’s default before routing.
 
+## Codex permission configuration
+
+Managed Codex creation stores `sandbox_mode: danger-full-access` and `approval_policy: never`, plus Full Access mode.
+Paseo 0.15.3 merges these stored values over provider defaults for creation and native resume.
+Its adapter passes the explicit values to Codex thread creation and resume.
+The opening hook still validates the current policy and prepares the outer sandbox.
+Existing or imported sessions with conflicting stored values remain outside this change.
+
+The regression matrix covers both Codex selections, missing and conflicting options, structured approval values, caller immutability, and unchanged unmanaged/Pi/Claude behavior.
+Before the fix, the matrix failed because a managed request lacked both explicit values.
+
+The repeatable live probe is `scripts/validate-codex-mode.mjs`.
+It requires `SAFEHOUSE_TEST_HOME` and `SAFEHOUSE_TEST_WORKSPACE` for a disposable daemon and workspace fixture.
+The fixture JSON contains `workspace.id` and `workspace.workspaceDirectory`.
+`SAFEHOUSE_TEST_OPTIONS` supplies request options as JSON. `SAFEHOUSE_TEST_OTHER_CANARY` names a canary in a second managed workspace.
+`SAFEHOUSE_TEST_OUTPUT` selects the evidence file. `SAFEHOUSE_TEST_EXPECT_WORKSPACE=INTENTIONALLY-INCORRECT` exercises the failing grader.
+The probe records completed tool output, durable nonce files, stored options, native effective configuration, conversation identity, and process replacement.
+It checks boundary denials and policy hashes before and after native reload.
+
+Use Paseo 0.15.3, Safehouse 0.12.0, Node 24.22.1, and available native Codex credentials.
+Before fixture startup, disable `features.dictation.enabled` and `features.voiceMode.enabled` to avoid unnecessary speech downloads.
+Configure conflicting defaults under `agents.providers.codex.options` before Safehouse setup: `sandbox_mode: read-only` and `approval_policy: on-request`.
+Install the plugin in that daemon and call `safehouse.setup`. Use home-directory fixtures outside baseline temporary-directory grants.
+
+Live checks on 2026-11-09 passed for plain requests, conflicting request options, and conflicting provider defaults across two disposable workspaces.
+Each session retained its native conversation identity, recalled its marker, and completed fresh nonce writes before and after process replacement.
+Native Codex records reported `never` and `danger-full-access` in both phases. All boundary probes returned `EPERM` and policy hashes remained unchanged.
+An intentionally incorrect nonce expectation failed with exit status 1. An earlier disk-full interruption remains recorded in task state.
+Evidence files are under the task worktree’s ignored `.local/`: `codex-plain-default-evidence.json`, `codex-conflict-retry-evidence.json`, and `codex-provider-defaults-evidence.json`.
+Independent validation remains required.
+
 ## Validation evidence
 
 Validation date: 2026-11-08, America/Los_Angeles.
@@ -110,9 +141,8 @@ Passing smoke tests establish specific behaviors, not the complete security boun
    Paseo supplies plugin-local maps and merges contributions afterward. The check cannot reject another plugin’s tools or MCP servers.
    The fixed daemon-port guard still applies, but it does not establish that all external capabilities were rejected.
    Document the process boundary and warn about additional MCP authority. Do not prohibit other enabled plugins. See [Paseo hooks](https://paseo.sh/docs/plugins/hooks).
-3. **Medium: explicit Codex options override Full Access.** Creation changes `modeId` but preserves conflicting `providerOptions`.
-   Paseo gives explicit sandbox and approval options precedence, so a saved `workspace-write` option can restore the failing inner sandbox.
-   Normalize or reject conflicts and cover creation and resume. See [Codex option precedence in the hook reference](https://paseo.sh/docs/plugins/hooks).
+3. **Codex option normalization implemented.** Creation persists compatible explicit sandbox and approval options after provider and policy validation.
+   The Codex permission configuration section records the new-session creation/resume evidence. Independent validation remains required.
 4. **Medium: partial setup cannot recover.** Provider configuration changes before the installation record is saved.
    A simulated lost response after the host applied the patch left three variants installed without an ownership record.
    Repeating setup rejected those variants as unrelated configuration. Add recoverable installation state and serialize concurrent setup operations.
@@ -131,7 +161,7 @@ Align the development SDK with the supported Paseo release and migrate compatibi
 Use scoped observations or cached status instead of enumerating every workspace and agent from each client every five seconds.
 These practices follow the [plugin reference](https://paseo.sh/docs/plugins/reference).
 
-Claude and Codex resume, cancellation, plugin update/removal, clean installation, and full desktop acceptance remain unverified release gates.
+Claude resume, cancellation, plugin update/removal, clean installation, and full desktop acceptance remain unverified release gates.
 
 ## Future upstream API opportunities
 
