@@ -1,6 +1,6 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { SafehousePanel } from "./client/panel";
-import { headerLabel, statusRpc } from "./shared/contracts";
+import { SafehousePanel, routingErrors } from "./client/panel";
+import { headerLabel, statusRpc, routingRpc } from "./shared/contracts";
 
 export default function contribute(client: PluginClientContext) {
   const cleanups = [
@@ -26,9 +26,38 @@ export default function contribute(client: PluginClientContext) {
   const headers = new Map<string, Registration>(),
     pills = new Map<string, Registration>();
   let disposed = false,
-    refreshing = false;
+    refreshing = false, refreshAgain = false;
+  function menu(id: string, enabled?: boolean) {
+    return {
+      kind: "menu" as const,
+      items: [
+        ...[true, false].map((choice) => ({
+          kind: "item" as const,
+          id: choice ? "enable" : "disable",
+          title: choice ? "Enable automatic Safehouse" : "Disable automatic Safehouse",
+          disabled: choice === enabled,
+          behavior: { kind: "action" as const, async onPress() {
+            try {
+              await client.rpc(routingRpc, { workspaceId: id, enabled: choice });
+              routingErrors.delete(id);
+            } catch (e) {
+              routingErrors.set(id, e instanceof Error ? e.message : String(e));
+              client.openPanel("safehouse", { workspaceId: id });
+            }
+            // Always read back persisted state; never optimistically mark a choice saved.
+            await refresh();
+          } },
+        })),
+        { kind: "item" as const, id: "review", title: "Review policy",
+          behavior: { kind: "action" as const, onPress() {
+            client.openPanel("safehouse", { workspaceId: id });
+          } } },
+      ],
+    };
+  }
   async function refresh() {
-    if (disposed || refreshing) return;
+    if (disposed) return;
+    if (refreshing) { refreshAgain = true; return; }
     refreshing = true;
     try {
       const { entries } = await client.paseo.workspaces.list();
@@ -54,7 +83,7 @@ export default function contribute(client: PluginClientContext) {
                 title: "Checking Safehouse",
                 label: "Safehouse checking",
                 icon: "ShieldCheck",
-                behavior,
+                behavior: menu(id),
               },
             }),
           );
@@ -62,7 +91,7 @@ export default function contribute(client: PluginClientContext) {
           const status = await client.rpc(statusRpc, { workspaceId: id });
           if (disposed) return;
           const label = headerLabel(status.state);
-          headers.get(id)!.update({ title: label, label });
+          headers.get(id)!.update({ title: label, label, behavior: menu(id, status.routingEnabled) });
           for (const agent of status.agents) {
             seenAgents.add(agent.id);
             const label = agent.preparedAt
@@ -91,6 +120,7 @@ export default function contribute(client: PluginClientContext) {
           headers.get(id)?.update({
             title: "Safehouse status unavailable",
             label: "Safehouse error",
+            behavior: menu(id),
           });
         }
       }
@@ -115,6 +145,7 @@ export default function contribute(client: PluginClientContext) {
       }
     } finally {
       refreshing = false;
+      if (refreshAgain) { refreshAgain = false; void refresh(); }
     }
   }
   void refresh().catch(() => {});

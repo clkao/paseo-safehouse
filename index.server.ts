@@ -1,6 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   statusRpc,
+  routingRpc,
   setupRpc,
   previewRpc,
   saveRpc,
@@ -8,6 +9,7 @@ import {
 } from "./shared/contracts";
 import {
   status,
+  setWorkspaceRouting,
   setup,
   preview,
   save,
@@ -20,6 +22,9 @@ import {
 export default function contribute(server: PluginServerContext) {
   server.handle(statusRpc, ({ workspaceId }, { paseo }) =>
     status(paseo, workspaceId),
+  );
+  server.handle(routingRpc, ({ workspaceId, enabled }, { paseo }) =>
+    setWorkspaceRouting(paseo, workspaceId, enabled),
   );
   server.handle(setupRpc, (input, { paseo }) => setup(paseo, input));
   server.handle(previewRpc, async ({ workspaceId, raw }, { paseo }) =>

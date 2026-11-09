@@ -5,7 +5,7 @@ This document specifies the intended behavior. The [validation plan](validation.
 
 ## Workspace policy
 
-The presence of `.safehouse` selects Safehouse for new agents in that workspace.
+The presence of `.safehouse` selects Safehouse for new agents unless the workspace choice disables automatic routing.
 The file authorizes its declared access by default. Launch does not require a separate approval record.
 The policy file and its custom profiles are trusted inputs for each new process.
 Invalid directives, unavailable paths, and unsupported capabilities fail rather than fall back to an ordinary launch.
@@ -13,7 +13,7 @@ Invalid directives, unavailable paths, and unsupported capabilities fail rather 
 The panel offers **Review access** to inspect or edit directory grants, capabilities, and custom profiles.
 **Save policy** writes the source file after preview and a check for concurrent edits.
 Existing policy bytes remain unchanged unless the user edits them.
-If `.safehouse` is absent, new ordinary-provider launches keep their native behavior.
+If `.safehouse` is absent and automatic routing is not explicitly enabled, new ordinary-provider launches keep their native behavior.
 The panel can create a policy; optional capabilities start unselected.
 
 The policy fingerprint includes the canonical workspace, source bytes, resolved grants, and custom profile contents.
@@ -28,13 +28,13 @@ Their stored providers do not change to ordinary providers automatically.
 
 | Workspace state                     | Header                | Action                       |
 | ----------------------------------- | --------------------- | ---------------------------- |
-| No policy                           | Safehouse off         | Create a policy              |
-| Valid policy and ready providers    | Safehouse on          | Inspect or edit access       |
+| No policy                           | Safehouse auto off         | Create a policy              |
+| Valid policy and ready providers    | Safehouse auto on          | Inspect or edit access       |
 | Invalid policy or unreadable inputs | Safehouse error       | Show the specific error      |
 | Provider setup required             | Safehouse setup       | Configure providers          |
 | Non-macOS host                      | Safehouse unavailable | Explain the host requirement |
 
-The header is an automatic status indicator. Opening it shows the policy panel. Error details belong in the panel, not the compact label.
+The header describes automatic routing. Its menu changes the workspace choice or opens the policy panel. The panel shows error details.
 The user selects ordinary providers and models in Paseo’s existing picker.
 Paseo also exposes the configured Safehouse variants in that picker.
 
@@ -44,9 +44,13 @@ The initial implementation reports a prepared policy until runtime evidence supp
 
 Paseo exposes workspace header buttons and agent composer indicators.
 Composer indicators require an existing agent ID. The new-agent form has no dedicated plugin status slot.
-The planned header menu selects **Enable for new launches**, **Disable for new launches**, or **Review policy**.
-The selection applies to the workspace until changed. It leaves `.safehouse` bytes and running agents unchanged.
-This menu is not implemented yet.
+The header menu selects **Enable automatic Safehouse**, **Disable automatic Safehouse**, or **Review policy**.
+The selection applies across clients until changed. It leaves policy bytes and running agents unchanged.
+The daemon stores one atomic record per canonical workspace beneath protected `safehouse/workspaces/` state.
+Malformed records block creation. Disable requires a resolvable workspace but does not parse the policy.
+Explicit enable persists without a policy and blocks new ordinary launches until the policy is valid.
+An explicit off choice takes precedence in the header. The panel still reports policy errors.
+Existing Safehouse agents always require a policy when they resume, regardless of automatic routing.
 
 Known limitation: the header context identifies a workspace, not a draft.
 All clients share the selection, so a concurrent launch can observe the same choice.
@@ -81,9 +85,16 @@ The plugin adds variants such as `pi-safehouse`, with `extends: "pi"` and a comm
 ["/bin/sh", "/protected/launchers/pi-<content-hash>.sh"]
 ```
 
-The generated bootstrap quotes literal paths and preserves Paseo’s arguments.
+The generated bootstrap quotes each configured command element literally, then appends Paseo’s protocol arguments.
 Session environment selects the protected policy snapshot.
 Ordinary provider configuration remains intact. Installation rejects collisions with unrelated provider entries.
+Explicit command arrays support built-in factories and direct derivatives of those factories.
+A derived variant extends the same built-in and retains source overrides, including native environment and tool-restriction inheritance.
+Generic custom ACP variants retain `extends: "acp"`. Identity-specific ACP adapters fail explicitly.
+The small factory compatibility list reflects Paseo 0.15.3. The public API has no factory-capability query.
+Plugin adapters, ambiguous inheritance, unavailable executables, and missing commands outside Pi/Claude/Codex defaults fail before execution.
+The installation records source and base configuration. Drift blocks launch with an instruction to configure Safehouse again.
+Setup retains owned variants for existing agents. Ownership comes from the protected installation record, not the provider suffix.
 The variant’s default environment selects restricted catalog discovery.
 Prepared launches require an existing snapshot directly beneath the plugin’s snapshot directory.
 Missing or malformed environment values fail before the harness starts.
@@ -101,9 +112,9 @@ The beta targets Paseo 0.15.3 and Safehouse 0.12.0. Earlier evidence used Paseo 
 
 The opening hook cannot change executable arguments. Provider configuration supplies that execution mechanism.
 Creation hooks exclude Paseo’s internal agents. The beta must attempt the selected harness inside Safehouse, including harnesses outside the initial three adapters.
-Generic launch support is not implemented yet; current code rejects unrecognized providers.
+Configured command support is bounded by adapter preservation. It does not establish conversation compatibility for every harness.
 A failed sandboxed launch must report the failure without an unsandboxed retry.
-The user can explicitly disable Safehouse for subsequent launches through the planned workspace menu.
+The user can explicitly disable Safehouse for subsequent launches through the workspace menu.
 
 ### Policy snapshots
 
