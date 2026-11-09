@@ -157,10 +157,16 @@ Supported session launches require the opening hook, which validates the workspa
 ### Provider permission modes
 
 Pi and Claude retain the selected permission mode. Claude retains its normal tool approval prompts.
-For Codex, the creation hook selects **Full Access** after verifying the Safehouse provider and workspace policy.
-This mode disables Codex’s inner sandbox and approval prompts. Safehouse enforces the workspace policy around the process.
-Codex’s default mode attempts to create a second macOS sandbox, which fails inside Safehouse.
-Ordinary Codex launches in unmanaged workspaces retain their selected mode.
+For Codex, the creation hook selects **Full Access** after provider and policy validation.
+It copies `providerOptions` and sets `sandbox_mode: danger-full-access` and `approval_policy: never`.
+These explicit values override conflicting request configuration and provider defaults, which take precedence over the selected mode.
+Safehouse enforces the outer process boundary. Codex does not create an inner sandbox or request tool approvals.
+Other provider options and the selected model remain intact. The hook does not mutate the caller’s request.
+Ordinary Codex launches in unmanaged workspaces retain their selected mode and provider options.
+
+Paseo stores the explicit values with each new managed session and supplies them during native resume.
+The opening hook validates the current workspace policy and prepares the outer sandbox snapshot.
+Resume support covers sessions created with this normalization. Existing or imported sessions with conflicting stored options require a separate migration design.
 
 ### Reload and resume
 
