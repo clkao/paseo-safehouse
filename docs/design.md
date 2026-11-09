@@ -44,7 +44,13 @@ The initial implementation reports a prepared policy until runtime evidence supp
 
 Paseo exposes workspace header buttons and agent composer indicators.
 Composer indicators require an existing agent ID. The new-agent form has no dedicated plugin status slot.
-Per-agent disable belongs in the [launch-form proposal](launch-controls.md).
+The planned header menu selects **Enable for new launches**, **Disable for new launches**, or **Review policy**.
+The selection applies to the workspace until changed. It leaves `.safehouse` bytes and running agents unchanged.
+This menu is not implemented yet.
+
+Known limitation: the header context identifies a workspace, not a draft.
+All clients share the selection, so a concurrent launch can observe the same choice.
+It cannot target one particular next draft. A draft-specific choice requires an upstream creation-form hook.
 
 ## Launch architecture
 
@@ -84,7 +90,7 @@ Missing or malformed environment values fail before the harness starts.
 
 ### Lifecycle hooks
 
-The integration targets Paseo 0.15.2 and Safehouse 0.12.0.
+The beta targets Paseo 0.15.3 and Safehouse 0.12.0. Earlier evidence used Paseo 0.15.2.
 
 | Integration point      | Behavior                                                                                  |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
@@ -94,7 +100,10 @@ The integration targets Paseo 0.15.2 and Safehouse 0.12.0.
 | Plugin panel and RPCs  | Review access, report readiness, and reload selected agents                               |
 
 The opening hook cannot change executable arguments. Provider configuration supplies that execution mechanism.
-Creation hooks exclude Paseo’s internal agents. Unsupported providers must produce a clear error in a managed workspace.
+Creation hooks exclude Paseo’s internal agents. The beta must attempt the selected harness inside Safehouse, including harnesses outside the initial three adapters.
+Generic launch support is not implemented yet; current code rejects unrecognized providers.
+A failed sandboxed launch must report the failure without an unsandboxed retry.
+The user can explicitly disable Safehouse for subsequent launches through the planned workspace menu.
 
 ### Policy snapshots
 
@@ -119,12 +128,14 @@ The bootstrap changes its directory to `/` and starts Safehouse with an explicit
 Discovery retains Safehouse’s baseline harness access and fixed protections for plugin state and daemon endpoints.
 It receives no workspace grants or workspace custom profiles.
 
-Pi discovery disables automatic extension loading. An explicit `piCatalogExtensions` list can load extensions that register models.
+Current Pi discovery disables automatic extension loading. This is a compatibility gap to remove, not a required user configuration workflow. An explicit `piCatalogExtensions` list can load extensions that register models.
 The `safehouse.setup` RPC accepts absolute extension paths and persists them in the installation record.
 Later setup calls preserve the list unless they supply a replacement. An empty array clears it.
 These paths do not grant filesystem access. Extensions and dependencies must remain readable under the catalog sandbox.
 Model providers from omitted extensions are absent from the catalog.
 Normal Pi sessions retain their configured extensions and workspace policy.
+The beta must use native harness configuration without harness-specific controls in the Safehouse panel.
+Normal Pi extension discovery within the catalog sandbox still requires runtime proof.
 
 The catalog marker selects a restricted launch mode, not a protocol authorization check.
 If a caller uses that marker for a conversation, the process retains catalog restrictions and receives no workspace access.
@@ -149,9 +160,25 @@ Detached descendants can retain the previous sandbox policy.
 
 Safehouse restricts the harness process and its children. The Paseo daemon remains outside that sandbox.
 Daemon-side tools, MCP services, and external services have separate authority.
-The initial integration disables agent-side Paseo tools and rejects MCP bridges and plugin tools supplied through Paseo.
+The implementation disables agent-side Paseo tools and rejects explicit or hook-local MCP contributions.
+Those checks do not cover MCP contributions from other plugins.
+Additional MCP services can provide access outside the process sandbox. Users must consider each service's authority.
+Other enabled plugins are not prohibited.
 Harness-native services and enabled credentials retain their own authority.
 
 Automatic workspace routing depends on an active plugin.
 The installed API cannot enforce workspace routing after the plugin is disabled or removed.
 Configured variants must still enter Safehouse or fail. They must never fall back to ordinary provider commands.
+
+## Future upstream API opportunities
+
+These improvements are outside the first beta requirements.
+
+| Opportunity | Useful upstream API | Current approach or limitation |
+| --- | --- | --- |
+| Per-draft Safehouse choice and readiness | Creation-form contribution with persisted, namespaced draft values | Workspace header menu governs subsequent launches across clients. See [launch controls](launch-controls.md). |
+| Safe launch for additional provider adapters | Public provider launch wrapper with executable, arguments, environment, and discovery context | Generic wrapping needs a feasibility check. Never retry an unsupported sandboxed launch outside Safehouse. |
+| Consistent discovery lifecycle | Catalog hook with explicit configuration and launch context | Protected bootstrap handles discovery separately from session opening. |
+| Final external-capability visibility | Final merged MCP/tool inventory and an optional veto | Disclose external authority; hook-local maps cannot establish global filtering. |
+| Permission changes during reopen | Supported mutation of effective provider options before resume | Persist compatible creation options and test native resume. |
+| Sandboxed workspace tools | Scoped terminal execution and environment APIs | [Workspace capabilities](workspace-capabilities.md) remains a separate design draft. |

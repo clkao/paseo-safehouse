@@ -1,6 +1,10 @@
 # Safehouse controls in the new-agent form
 
-Status: design draft. The launch controls described here are not implemented.
+Status: future upstream API opportunity, outside the first beta. These controls are not implemented.
+
+The beta plans a workspace header menu for subsequent launches. Its selection persists until changed and applies across clients.
+The header has no draft identity, so it cannot select one particular next launch.
+The design below requires a creation-form hook to remove that limitation.
 
 The new-agent form must show whether the next agent will use Safehouse.
 The user can disable Safehouse for that agent before launch. The workspace policy remains intact.

@@ -3,7 +3,7 @@
 ## Scope
 
 The implementation targets Safehouse provider variants with automatic workspace policy detection.
-Development and live probes use an isolated Paseo 0.15.2 daemon.
+Current beta acceptance targets an isolated Paseo 0.15.3 daemon. Historical probes below used 0.15.2.
 The plugin is also installed on the main daemon. Plugin reloads must preserve existing sessions.
 
 ## Work
@@ -19,7 +19,7 @@ The plugin is also installed on the main daemon. Plugin reloads must preserve ex
 - [ ] Validate Claude and Codex independently.
 - [x] Draft the workspace capability broker design and identify the minimum Subspace integration.
 - [x] Draft native launch-form controls for status and a per-agent Safehouse choice.
-- [ ] Decide the Paseo launch-form extension before implementation. Per-agent disable belongs in that extension.
+- [ ] Add the workspace enable/disable menu and test launch failure recovery. Per-draft controls are a future API opportunity.
 - [x] Verify automatic policy trust and installed status data for concise header labels.
 - [x] Validate restricted catalog discovery through a protected bootstrap on the development daemon.
 - [ ] Resolve the release-review findings before general distribution.
@@ -69,7 +69,7 @@ The main instance reloaded only `paseo-safehouse-direct`. The `email-triage-282`
 That status maps to **Safehouse on**. Visual confirmation of the updated label remains open.
 The original ASR Pi agent remains available and idle. No existing agent was reloaded.
 
-Per-agent disable waits for the native launch-form extension. Each new draft will derive its default from the workspace policy.
+Workspace enable/disable is planned through the existing header-menu API. Per-draft controls require the future creation-form extension.
 
 The user confirmed that the workspace header is visible. Full desktop launch and panel acceptance remains open.
 The panel and command center identify the plugin as **Safehouse**. Provider IDs in the evidence below identify the tested pre-rename installation.
@@ -109,16 +109,16 @@ Passing smoke tests establish specific behaviors, not the complete security boun
 2. **High: the bridge rejection does not cover other plugins.** `prepareOpening` checks `request.tools` and `request.mcpServers` as though they describe the final launch.
    Paseo supplies plugin-local maps and merges contributions afterward. The check cannot reject another plugin’s tools or MCP servers.
    The fixed daemon-port guard still applies, but it does not establish that all external capabilities were rejected.
-   Define and enforce a supported coexistence boundary, and make the documentation match it. See [Paseo hooks](https://paseo.sh/docs/plugins/hooks).
+   Document the process boundary and warn about additional MCP authority. Do not prohibit other enabled plugins. See [Paseo hooks](https://paseo.sh/docs/plugins/hooks).
 3. **Medium: explicit Codex options override Full Access.** Creation changes `modeId` but preserves conflicting `providerOptions`.
    Paseo gives explicit sandbox and approval options precedence, so a saved `workspace-write` option can restore the failing inner sandbox.
    Normalize or reject conflicts and cover creation and resume. See [Codex option precedence in the hook reference](https://paseo.sh/docs/plugins/hooks).
 4. **Medium: partial setup cannot recover.** Provider configuration changes before the installation record is saved.
    A simulated lost response after the host applied the patch left three variants installed without an ownership record.
    Repeating setup rejected those variants as unrelated configuration. Add recoverable installation state and serialize concurrent setup operations.
-5. **Medium: Pi catalog configuration lacks a user interface.** Provider extensions require absolute paths through `safehouse.setup`.
+5. **Medium: Pi catalog discovery suppresses native extensions.** The bootstrap passes `--no-extensions` and requires separate extension paths.
    Without that configuration, the catalog can omit models available to normal Pi sessions. The panel exposes no control for this list.
-   Add installation settings and visible discovery errors. Keep directory grants separate from extension selection.
+   Restore native configuration discovery within the catalog sandbox. Do not add harness-specific panel settings.
 
 Publication preparation also remains incomplete. The package is private, has no repository metadata, and the repository has no remote.
 The manifest has no interface image. The public listing must describe data access, provider traffic, requirements, and limitations.
@@ -133,7 +133,9 @@ These practices follow the [plugin reference](https://paseo.sh/docs/plugins/refe
 
 Claude and Codex resume, cancellation, plugin update/removal, clean installation, and full desktop acceptance remain unverified release gates.
 
-## Design drafts
+## Future upstream API opportunities
 
-- [Launch controls](launch-controls.md): visible sandbox status and a per-agent choice in Paseo’s native new-agent form.
+These drafts are outside the first beta. See the [API opportunities table](design.md#future-upstream-api-opportunities).
+
+- [Launch controls](launch-controls.md): a draft-specific choice and readiness in the native creation form.
 - [Workspace capabilities](workspace-capabilities.md): restricted terminal creation for Subspace, with browser access as a separate capability.

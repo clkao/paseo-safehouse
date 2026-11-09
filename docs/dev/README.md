@@ -50,7 +50,7 @@ The release requires working discovery, launch, real workspace access and denial
 ### Scope and dispatch order
 
 1. Policy serialization is delivered and independently validated. Retain its regressions in subsequent candidates.
-2. Restore normal Pi model discovery through native configuration. Investigate the bootstrap's `--no-extensions` suppression before adding any mechanism. No extension-path settings or other harness-specific controls belong in the Safehouse panel. The existing `pi-catalog-settings` task now owns this compatibility outcome, not a settings UI.
+2. Implement the workspace header enable/disable choice and generic sandboxed launch attempt. Test failure, explicit disable, retry, and re-enable. Never retry outside Safehouse automatically. Restore normal Pi model discovery through native configuration. Investigate the bootstrap's `--no-extensions` suppression before adding any mechanism. No extension-path settings or other harness-specific controls belong in the Safehouse panel. The existing `pi-catalog-settings` task now owns this compatibility outcome, not a settings UI.
 3. Normalize managed Codex permission options automatically and verify creation and native resume on 0.15.3. No user-facing Codex permission controls are required.
 4. Make fresh provider setup retryable after partial failure and safe under concurrent calls. Preserve unrelated entries. This is clean-install reliability, not migration.
 5. Correct capability-boundary claims with a concise warning: additional MCP services can provide access outside the sandbox. Other configured plugins must not be blocked or disabled. The `plugin-capability-boundary` task owns this disclosure; its former single-plugin implementation is withdrawn.
@@ -62,7 +62,7 @@ Design and independent review may overlap. Sequence changes to shared service/se
 
 | Constraint | Supported behavior or workaround |
 | --- | --- |
-| Plugins cannot add the proposed controls to Paseo's new-agent launcher. | Use the native provider/model picker and automatic workspace routing. Keep the Safehouse panel focused on policy and reload. |
+| Plugins cannot add the proposed controls to Paseo's new-agent launcher. | Use the native picker and a workspace header menu. The persistent selection applies across clients, not to one draft. Keep the panel focused on policy and reload. |
 | Catalog discovery runs without the workspace opening hook. | Keep discovery sandboxed without workspace grants; load existing native user configuration. Ordinary discovery must not require copying extension paths into Safehouse. Normal Pi loading under this sandbox still needs proof. |
 | The opening hook cannot rewrite Codex mode or provider options. | Normalize and persist compatible options at creation; prove that native resume retains them. No legacy-session migration is promised. |
 | Plugin hooks see local MCP contributions, not a final global veto point. | Disclose additional MCP authority. Do not claim global filtering or impose a single-plugin installation rule. |
@@ -75,6 +75,11 @@ Design and independent review may overlap. Sequence changes to shared service/se
 No installation migration, Paseo core changes, main-daemon changes, harness-specific panel settings, new capability broker, or peer-plugin prohibition belongs in this milestone. New tests must exercise an actual claimed behavior; no new general testing framework is needed.
 
 These scope decisions control older task proposals. Revise task designs before their next dispatch; do not implement withdrawn UI or enforcement criteria. Keep the compatibility and disclosure work tracked under the existing tasks rather than creating replacement process tasks.
+
+## Future upstream API opportunities
+
+Creation-form contributions can add per-draft choices and readiness. Provider-wrapper, discovery, and final-capability hooks can simplify integration.
+These are not beta prerequisites. See [the design table](../design.md#future-upstream-api-opportunities) for current constraints and workarounds.
 
 ## Engineering posture
 

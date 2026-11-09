@@ -1,6 +1,6 @@
 # Workspace capabilities for sandboxed agents
 
-Status: design draft. The broker described here is not implemented.
+Status: future design opportunity, outside the first beta. The broker described here is not implemented.
 
 Sandboxed agents need a controlled way to open workspace tools through Paseo.
 The first use case is a Subspace review in a terminal pane within the caller’s workspace.
@@ -36,7 +36,7 @@ The broker never exposes its Paseo credentials or a general RPC forwarding opera
 
 ## Minimum useful implementation
 
-The first release supports three operations:
+The proposed broker supports three operations:
 
 | Operation      | Request                                   | Result                                           |
 | -------------- | ----------------------------------------- | ------------------------------------------------ |

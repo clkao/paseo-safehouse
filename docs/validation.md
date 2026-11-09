@@ -13,7 +13,7 @@ Results and outstanding work belong in [implementation status](implementation.md
 | Complete policy transport | Grants, capabilities, and custom profiles reach Safehouse while the harness retains its workspace directory.                                                     |
 | Snapshot integrity        | A running process retains its captured policy after source changes. The harness cannot edit policy sources or enforcement state.                                 |
 | Workspace isolation       | Concurrent agents retain separate policies. Unrelated workspaces and existing sessions retain their behavior.                                                    |
-| Discovery                 | Variant catalogs load under Safehouse without workspace access. Configured Pi provider extensions supply their models. Discovery never borrows workspace grants. |
+| Discovery                 | Variant catalogs load under Safehouse without workspace access. Native harness configuration supplies extension models. Discovery never borrows workspace grants. |
 | Failure handling          | Missing or invalid bootstrap environment, provider collisions, and unavailable Safehouse produce errors without a host fallback.                                 |
 | Status                    | Concise header states distinguish On, Off, Setup, and Error. Agent indicators distinguish policy preparation from runtime evidence.                              |
 | Process supervision       | Cancellation, child cleanup, exit reporting, and native resume retain expected behavior.                                                                         |
@@ -22,6 +22,20 @@ Results and outstanding work belong in [implementation status](implementation.md
 
 The plugin’s absence prevents automatic routing enforcement. This is an explicit boundary, not a passing failure-handling result.
 Unresolved gates prevent a release claim.
+
+## First-beta launch and recovery cases
+
+Acceptance targets Paseo 0.15.3 and Safehouse 0.12.0 on clean isolated installations.
+
+1. Header enable/disable affects subsequent workspace launches and leaves policy bytes and running agents unchanged.
+2. Two clients observe the workspace selection. The UI does not promise a draft-specific or one-shot choice.
+3. An additional harness is attempted inside Safehouse. Failure reports a useful error and never triggers an unsandboxed retry.
+4. After an explicit workspace disable, a new ordinary launch uses native behavior. Re-enable restores sandboxed launch attempts.
+5. Policy edits take effect after reload of the selected agent, with its conversation preserved.
+6. Native model configuration works without harness-specific Safehouse controls.
+7. Additional MCP authority is disclosed without prohibiting other plugins.
+
+These are required scenarios, not claims of completed implementation.
 
 ## Provider acceptance
 

@@ -17,9 +17,12 @@ The workspace policy applies across supported providers while Paseo manages conv
 5. To apply policy changes to an existing agent, reload that agent.
 
 Without `.safehouse`, the header shows **Safehouse off**. The panel can create a policy from directory grants and optional capabilities.
-Temporary disable is planned as a per-agent choice in the [native launch-form design](docs/launch-controls.md).
+A workspace header menu for enabling or disabling Safehouse on new launches is planned.
+Its choice will apply across clients until changed; it cannot identify a particular draft.
+Per-draft controls remain a [future API opportunity](docs/design.md#future-upstream-api-opportunities).
 
 Safehouse restricts the agent process and its children. The Paseo daemon remains outside that sandbox.
+Additional MCP services can provide access outside the sandbox and retain their own authority.
 Workspaces without a policy keep their ordinary launch behavior. Existing sessions retain their launch policy.
 
 ## Platform and providers
@@ -30,7 +33,8 @@ This disables Codex’s inner sandbox and approval prompts.
 Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
 
 Model discovery runs in a separate Safehouse process with no workspace grants.
-Pi discovery loads only explicitly configured provider extensions. Normal Pi sessions retain their configured extensions.
+Current Pi discovery loads only explicitly configured provider extensions. Native extension discovery is an open beta compatibility gap.
+The beta will use native harness configuration without harness-specific panel settings.
 The [design](docs/design.md#provider-discovery) describes catalog extension configuration and its limits.
 
 ## Development
@@ -38,7 +42,8 @@ The [design](docs/design.md#provider-discovery) describes catalog extension conf
 Development is managed by the [Spacedock dev workflow](docs/dev/README.md).
 The development agent runs outside Safehouse and uses an isolated daemon for sandboxed test agents.
 
-The prototype requires Paseo 0.15.2 and Safehouse 0.12.0 on the daemon host.
+Beta acceptance targets Paseo 0.15.3 and Safehouse 0.12.0 on the daemon host.
+Earlier provider evidence used Paseo 0.15.2; full 0.15.3 acceptance remains open.
 Development uses the SDK 0.14 lifecycle aliases that Paseo 0.15.2 supports.
 
 ```sh
