@@ -200,8 +200,8 @@ export function SafehousePanel({
                 harness access.
               </Text>
               <Text style={muted}>
-                For Codex, select Full Access in Paseo. Safehouse enforces the
-                approved workspace policy around the process.
+                Codex uses Full Access automatically, with no Codex approval
+                prompts. Safehouse enforces the approved workspace policy.
               </Text>
               {data.raw === null ? (
                 <View style={{ gap: 14 }}>

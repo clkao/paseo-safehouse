@@ -22,7 +22,8 @@ Workspaces without a policy keep their ordinary launch behavior. Existing sessio
 ## Platform and providers
 
 The daemon host must run macOS. Pi, Claude, and Codex passed initial live sandbox probes.
-Codex requires an explicit **Full Access** selection because its default macOS sandbox cannot run inside Safehouse.
+The plugin selects Codex **Full Access** automatically for approved Safehouse launches.
+This disables Codex’s inner sandbox and approval prompts.
 Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
 
 ## Development

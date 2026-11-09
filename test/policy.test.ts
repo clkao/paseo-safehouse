@@ -89,9 +89,6 @@ test("concurrent save rejects stale review and symlink policy sources", async (t
 test("unmanaged workspaces retain ordinary provider selection without daemon calls", async (t) => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-unmanaged-"));
   t.after(() => fs.rm(cwd, { recursive: true, force: true }));
-  const request = {
-    config: { provider: "pi", cwd, model: "lunaroute/deepseek-4.1-flash" },
-  };
   const forbidden = new Proxy(
     {},
     {
@@ -100,7 +97,12 @@ test("unmanaged workspaces retain ordinary provider selection without daemon cal
       },
     },
   ) as Parameters<typeof routeCreation>[1];
-  assert.equal(await routeCreation(request, forbidden), request);
+  for (const provider of ["pi", "claude", "codex"]) {
+    for (const modeId of [undefined, "auto", "read-only", "full-access"]) {
+      const request = { config: { provider, cwd, modeId } };
+      assert.equal(await routeCreation(request, forbidden), request);
+    }
+  }
   assert.equal(variant("pi"), "pi-safehouse-direct");
 });
 
@@ -137,6 +139,11 @@ test(
         ...entry,
         extends: "codex",
         label: "Codex · Safehouse",
+      },
+      [variant("claude")]: {
+        ...entry,
+        extends: "claude",
+        label: "Claude · Safehouse",
       },
     };
     await atomicJson(path.join(root, "installation.json"), {
@@ -179,32 +186,59 @@ test(
     assert.equal(routed.config.provider, variant("pi"));
     assert.equal(routed.config.model, "fixture/model");
     assert.deepEqual(requestedCatalogs, ["pi"]);
-    await assert.rejects(
-      routeCreation(
+    for (const provider of ["codex", variant("codex")]) {
+      for (const modeId of [undefined, "auto", "read-only", "full-access"]) {
+        const request: Parameters<typeof routeCreation>[0] = {
+          config: {
+            cwd: workspaces[0],
+            provider,
+            model: "fixture/model",
+            modeId,
+          },
+        };
+        const codex = await routeCreation(request, paseo);
+        assert.equal(codex.config.modeId, "full-access");
+        assert.equal(codex.config.provider, variant("codex"));
+        assert.equal(request.config.modeId, modeId);
+      }
+    }
+    for (const provider of ["pi", "claude"]) {
+      const result = await routeCreation(
         {
           config: {
             cwd: workspaces[0],
-            provider: "codex",
+            provider,
+            modeId: "auto",
             model: "fixture/model",
           },
         },
         paseo,
-      ),
-      /Select Full Access/,
-    );
-    const codex = await routeCreation(
-      {
-        config: {
-          cwd: workspaces[0],
-          provider: "codex",
-          model: "fixture/model",
-          modeId: "full-access",
-        },
+      );
+      assert.equal(result.config.modeId, "auto");
+    }
+    const codexRequest = {
+      config: {
+        cwd: workspaces[0],
+        provider: "codex",
+        modeId: "auto",
+        model: "fixture/model",
       },
-      paseo,
+    };
+    await fs.writeFile(path.join(workspaces[0], ".safehouse"), "# changed\n");
+    await assert.rejects(routeCreation(codexRequest, paseo), /REVIEW_REQUIRED/);
+    assert.equal(codexRequest.config.modeId, "auto");
+    await fs.writeFile(path.join(workspaces[0], ".safehouse"), "");
+    const originalEntry = entries[variant("codex")];
+    entries[variant("codex")] = {
+      ...originalEntry,
+      command: ["/fixture/codex"],
+    };
+    await assert.rejects(
+      routeCreation(codexRequest, paseo),
+      /configuration changed/,
     );
-    assert.equal(codex.config.modeId, "full-access");
-    assert.equal(codex.config.provider, variant("codex"));
+    assert.equal(codexRequest.config.modeId, "auto");
+    entries[variant("codex")] = originalEntry;
     const opening = (cwd: string, id: string) => ({
       agentId: id,
       workspaceId: null,

@@ -17,7 +17,7 @@ Results and outstanding work belong in [implementation status](implementation.md
 | Failure handling | Missing preparation, provider collisions, and unavailable Safehouse produce errors without a host fallback. |
 | Status | Header states match readiness. Agent indicators distinguish policy preparation from runtime evidence. |
 | Process supervision | Cancellation, child cleanup, exit reporting, and native resume retain expected behavior. |
-| Provider modes | Claude retains tool approvals. Codex requires an explicit Full Access selection and remains restricted by Safehouse. |
+| Provider modes | Approved Codex launches automatically use Full Access and remain restricted by Safehouse. Unmanaged launches and other providers retain their modes. |
 | Platform | Non-macOS hosts cannot configure or launch Safehouse variants. |
 
 The plugin’s absence prevents automatic routing enforcement. This is an explicit boundary, not a passing failure-handling result.

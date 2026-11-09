@@ -253,11 +253,6 @@ export async function routeCreation(
       `Safehouse does not yet support provider ${request.config.provider}.`,
     );
   const provider = variant(host);
-  if (host === "codex" && request.config.modeId !== "full-access") {
-    throw new Error(
-      "Codex cannot start its own macOS sandbox inside Safehouse. Select Full Access in Paseo for this agent. Safehouse still enforces the approved workspace policy.",
-    );
-  }
   const saved = await ready(paseo, provider);
   await requireApproval(stateRoot(), cwd, saved.features);
   if (Object.keys(request.config.mcpServers ?? {}).length)
@@ -274,7 +269,16 @@ export async function routeCreation(
         `Select a ${host} model before launching with Safehouse.`,
       );
   }
-  return { ...request, config: { ...request.config, provider, model } };
+  return {
+    ...request,
+    config: {
+      ...request.config,
+      provider,
+      model,
+      // Safehouse supplies the sandbox; Codex cannot nest macOS Seatbelt.
+      ...(host === "codex" ? { modeId: "full-access" } : {}),
+    },
+  };
 }
 export async function prepareOpening(
   request: PluginSessionOpenRequest,

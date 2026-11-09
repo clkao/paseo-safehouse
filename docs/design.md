@@ -114,11 +114,11 @@ Provider-specific discovery and shared-process behavior remain release gates.
 
 ### Provider permission modes
 
-The plugin preserves the user's selected permission mode.
-Claude retains its normal tool approval prompts.
-Codex requires an explicit **Full Access** selection because its default mode attempts to create a second macOS sandbox.
-Safehouse remains the outer sandbox in this mode. The plugin rejects incompatible Codex selections before creating an agent.
-The initial Codex tool probe passed in this configuration. Resume and concurrent-workspace acceptance remain separate gates.
+Pi and Claude retain the selected permission mode. Claude retains its normal tool approval prompts.
+For Codex, the creation hook selects **Full Access** after verifying the Safehouse provider and workspace approval.
+This mode disables Codex’s inner sandbox and approval prompts. Safehouse enforces the approved workspace policy around the process.
+Codex’s default mode attempts to create a second macOS sandbox, which fails inside Safehouse.
+Ordinary Codex launches in unmanaged workspaces retain their selected mode.
 
 ### Reload and resume
 
