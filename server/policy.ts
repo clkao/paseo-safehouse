@@ -130,12 +130,17 @@ export async function readSource(cwd: string) {
     throw error;
   }
 }
+function policyPath(value: string) {
+  if (/[:\r\n\0]/.test(value))
+    throw new Error("Safehouse paths cannot contain colons, line breaks, or NUL.");
+  return value;
+}
 export async function resolvePolicy(
   raw: string,
   cwd: string,
   supported: string[],
 ) {
-  cwd = await canonicalDirectory(cwd);
+  cwd = policyPath(await canonicalDirectory(cwd));
   const parsed = parsePolicy(raw);
   for (const feature of parsed.enable)
     if (!supported.includes(feature))
@@ -148,9 +153,7 @@ export async function resolvePolicy(
           ? path.join(homedir(), value.slice(2))
           : value;
     const real = await fs.realpath(path.resolve(cwd, expanded));
-    if (/[:\r\n\0]/.test(real))
-      throw new Error("Safehouse paths cannot contain colons or line breaks.");
-    return real;
+    return policyPath(real);
   };
   const readOnly = [
     ...new Set(await Promise.all(parsed.readOnly.map(resolve))),
@@ -217,24 +220,28 @@ export function guardProfile(
   );
 }
 export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
+  policyPath(root);
+  policyPath(policy.cwd);
+  policy.readOnly.forEach(policyPath);
+  policy.readWrite.forEach(policyPath);
+  policy.profiles.forEach((profile) => policyPath(profile.path));
   const parent = path.join(root, "snapshots");
+  const prefix = policyPath(path.join(parent, `${policy.digest.slice(0, 12)}-`));
   await fs.mkdir(parent, { recursive: true, mode: 0o700 });
-  const dir = await fs.mkdtemp(
-    path.join(parent, `${policy.digest.slice(0, 12)}-`),
-  );
+  const dir = await fs.mkdtemp(prefix);
   try {
-    const lines = [`add-dirs=${policy.cwd}`];
+    const lines = [`add-dirs=${policyPath(policy.cwd)}`];
     lines.push(
-      ...policy.readOnly.map((p) => `add-dirs-ro=${p}`),
-      ...policy.readWrite.map((p) => `add-dirs=${p}`),
+      ...policy.readOnly.map((p) => `add-dirs-ro=${policyPath(p)}`),
+      ...policy.readWrite.map((p) => `add-dirs=${policyPath(p)}`),
     );
     lines.push(...policy.enable.map((f) => `enable=${f}`));
     for (let i = 0; i < policy.profiles.length; i++) {
-      const file = path.join(dir, `profile-${i}.sb`);
+      const file = policyPath(path.join(dir, `profile-${i}.sb`));
       await atomicWrite(file, policy.profiles[i].content);
       lines.push(`append-profile=${file}`);
     }
-    const guard = path.join(dir, "workspace.sb");
+    const guard = policyPath(path.join(dir, "workspace.sb"));
     await atomicWrite(
       guard,
       guardProfile(

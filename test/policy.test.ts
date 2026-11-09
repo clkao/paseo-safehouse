@@ -86,7 +86,7 @@ test("concurrent save rejects stale review and symlink policy sources", async (t
   await assert.rejects(readSource(cwd), /regular file/);
 });
 test("unmanaged workspaces retain ordinary provider selection without daemon calls", async (t) => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-unmanaged-"));
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-unmanaged-:\r\n"));
   t.after(() => fs.rm(cwd, { recursive: true, force: true }));
   const forbidden = new Proxy(
     {},
@@ -314,3 +314,71 @@ test(
     );
   },
 );
+
+for (const delimiter of [":", "\r", "\n", "\0"]) {
+  test(`policy paths reject ${JSON.stringify(delimiter)} without snapshot residue`, async (t) => {
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-delimiter-"));
+    t.after(() => fs.rm(base, { recursive: true, force: true }));
+    const policy = await resolvePolicy("", base, []);
+    const bad = path.join(base, `unsafe${delimiter}path`);
+    const root = path.join(base, "state");
+    const rejects = async (input: typeof policy, state = root) => {
+      await assert.rejects(prepareSnapshot(state, input), /Safehouse paths cannot contain/);
+      assert.deepEqual(await fs.readdir(path.join(root, "snapshots")).catch(() => []), []);
+      if (delimiter !== "\0")
+        assert.deepEqual(await fs.readdir(path.join(state, "snapshots")).catch(() => []), []);
+    };
+    for (const [role, input] of Object.entries({
+      workspace: { ...policy, cwd: bad },
+      readOnly: { ...policy, readOnly: [bad] },
+      readWrite: { ...policy, readWrite: [bad] },
+      profile: { ...policy, profiles: [{ path: bad, content: "; profile\n" }] },
+    })) await t.test(`direct ${role}`, () => rejects(input));
+    for (const profiles of [[], [{ path: path.join(base, "safe.sb"), content: "; profile\n" }]])
+      await t.test(`state path with ${profiles.length} profiles`, () => rejects({ ...policy, profiles }, `${bad}-state`));
+    // A forged digest also reaches generated paths independently of the state root.
+    await t.test("generated snapshot path", () => rejects({ ...policy, digest: `bad${delimiter}digest` }));
+    if (delimiter === "\0") return; // Filesystem names cannot contain NUL.
+    await fs.mkdir(bad);
+    const alias = path.join(base, "alias");
+    await fs.symlink(bad, alias);
+    await t.test("canonical workspace", async () => {
+      for (const cwd of [bad, alias])
+        await assert.rejects(resolvePolicy("", cwd, []), /Safehouse paths cannot contain/);
+    });
+    for (const directive of ["add-dirs", "add-dirs-ro", "append-profile"]) {
+      const target = directive === "append-profile" ? path.join(bad, "custom.sb") : bad;
+      if (directive === "append-profile") await fs.writeFile(target, "; profile\n");
+      const link = path.join(base, directive);
+      await fs.symlink(target, link);
+      await t.test(`canonical ${directive}`, () => assert.rejects(
+        resolvePolicy(`${directive}=${link}\n`, base, []), /Safehouse paths cannot contain/,
+      ));
+    }
+  });
+}
+
+test("ordinary path bytes and symlink targets retain isolated snapshots", async (t) => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-ordinary-"));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const cwd = path.join(base, "workspace 空間's"), root = path.join(base, "state 空間's");
+  await fs.mkdir(cwd);
+  const alias = path.join(base, "alias");
+  await fs.symlink(cwd, alias);
+  const profile = path.join(cwd, "custom 空間's.sb");
+  const content = "; exact profile bytes\n";
+  await fs.writeFile(profile, content);
+  const raw = `# source bytes\nadd-dirs-ro=${alias}\nadd-dirs=${alias}\nappend-profile=${profile}\n`;
+  await fs.writeFile(path.join(cwd, ".safehouse"), raw);
+  const policy = await resolvePolicy(raw, alias, []);
+  const canonical = await fs.realpath(cwd);
+  assert.deepEqual([policy.cwd, ...policy.readOnly, ...policy.readWrite], [canonical, canonical, canonical]);
+  const first = await prepareSnapshot(root, policy), second = await prepareSnapshot(root, policy);
+  assert.notEqual(first, second);
+  assert.equal(await fs.readFile(path.join(first, ".safehouse"), "utf8"),
+    `add-dirs=${canonical}\nadd-dirs-ro=${canonical}\nadd-dirs=${canonical}\nappend-profile=${path.join(first, "profile-0.sb")}\nappend-profile=${path.join(first, "workspace.sb")}\n`);
+  await fs.writeFile(profile, "; changed\n");
+  assert.equal(await fs.readFile(path.join(first, "profile-0.sb"), "utf8"), content);
+  assert.equal(await fs.readFile(path.join(second, "profile-0.sb"), "utf8"), content);
+  assert.equal(await fs.readFile(path.join(cwd, ".safehouse"), "utf8"), raw);
+});
