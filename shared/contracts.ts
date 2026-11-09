@@ -29,7 +29,7 @@ export const statusRpc = defineRpc({
   }),
 });
 export const routingRpc = defineRpc({
-  name: "safehouse.setWorkspaceRouting",
+  name: "safehouse.set-workspace-routing",
   input: workspace.extend({ enabled: z.boolean() }),
   output: z.object({ enabled: z.boolean() }),
 });

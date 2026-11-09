@@ -463,3 +463,9 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   await assert.rejects(routeCreation(request, paseo), /Configure Safehouse again/);
   assert.equal(request.config.provider, "custom");
 });
+
+test("RPC contracts construct through the SDK and routing requires a boolean", async () => {
+  const { routingRpc } = await import("../shared/contracts");
+  assert.deepEqual(routingRpc.input.parse({ workspaceId: "fixture", enabled: false }), { workspaceId: "fixture", enabled: false });
+  assert.throws(() => routingRpc.input.parse({ workspaceId: "fixture", enabled: "false" }));
+});
