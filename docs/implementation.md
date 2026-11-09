@@ -254,3 +254,24 @@ The recovered command read and wrote its workspace. Sibling reads and writes ret
 Use `scripts/validate-setup-recovery.mjs` with `node --import tsx` and an FO-allocated `SAFEHOUSE_TEST_HOME`.
 Run its `interrupt` phase, restart that isolated daemon, then run its `retry` phase.
 The daemon requires the local plugin installation and disabled voice and dictation features.
+
+
+## Launch correction candidate
+
+The source correction adds explicit provider environment transport to both session and catalog subprocesses.
+Real child tests preserve source/base variables and source overrides while blocked controls and an unlisted sentinel remain absent.
+Only comparison results enter test output. Bootstrap files contain environment names, not values.
+
+The panel keeps **Refresh providers** visible after setup and displays unavailable-provider reasons.
+Creation errors distinguish a missing explicit command from a provider that needs refresh, and include ordinary-launch recovery.
+Saved-policy text respects automatic routing off. Missing-policy text applies to creation and resume.
+
+A disposable generic ACP fixture passed native creation with an empty catalog on Paseo 0.15.3.
+The same protocol started inside Safehouse without an invented model and denied sibling access.
+This establishes the generic ACP path only. Other adapters retain a provider-specific missing-model error.
+The isolated daemon also refreshed the new provider without changing its ordinary configuration, then launched its sandboxed variant with its environment intact.
+
+The repeatable tests are in `test/launch.test.ts`, `test/policy.test.ts`, and `test/sandbox.mac.test.ts`.
+Set the documented `PASEO_RUNTIME_MODULES` path to exercise the installed ACP adapter and registry.
+The rendered Refresh action, reasons, recovery flow and off/save text still require the human UI drive.
+The running human-beta artifact remains unchanged pending independent review and repackaging of this correction.

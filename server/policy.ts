@@ -63,6 +63,14 @@ export async function findExecutable(name: string) {
   }
   return null;
 }
+export const blockedEnvironmentName = (name: string) =>
+  /^(SAFEHOUSE_|PASEO_|DYLD_|LD_|BASH_FUNC_)/.test(name) ||
+  ["NODE_OPTIONS", "NODE_PATH", "ELECTRON_RUN_AS_NODE", "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS"].includes(name);
+export function providerEnvironmentNames(names: string[]) {
+  if (names.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)))
+    throw new Error("Provider environment contains an invalid variable name.");
+  return [...new Set(names)].filter((name) => !blockedEnvironmentName(name));
+}
 export function policyEnvironment(
   input: Record<string, string | undefined>,
   workdir: string,
@@ -73,18 +81,7 @@ export function policyEnvironment(
     ...Object.keys(process.env),
     ...Object.keys(input),
   ])) {
-    if (
-      /^(SAFEHOUSE_|PASEO_|DYLD_|LD_|BASH_FUNC_)/.test(name) ||
-      [
-        "NODE_OPTIONS",
-        "NODE_PATH",
-        "ELECTRON_RUN_AS_NODE",
-        "BASH_ENV",
-        "ENV",
-        "SHELLOPTS",
-        "BASHOPTS",
-      ].includes(name)
-    )
+    if (blockedEnvironmentName(name))
       result[name] = "";
     else if (input[name] !== undefined) result[name] = input[name]!;
   }
@@ -190,7 +187,7 @@ export async function loadPolicy(cwd: string, features: string[]) {
   const raw = await readSource(cwd);
   if (raw === null)
     throw new Error(
-      "SAFEHOUSE_POLICY_MISSING: .safehouse is missing. Restore it before resuming this sandboxed agent.",
+      "SAFEHOUSE_POLICY_MISSING: .safehouse is missing. Create or restore it before launching or resuming a Safehouse agent.",
     );
   return resolvePolicy(raw, cwd, features);
 }

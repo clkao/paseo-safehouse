@@ -11,6 +11,7 @@ The policy file and its custom profiles are trusted inputs for each new process.
 Invalid directives, unavailable paths, and unsupported capabilities fail rather than fall back to an ordinary launch.
 
 The panel offers **Review access** to inspect or edit directory grants, capabilities, and custom profiles.
+**Refresh providers** remains available after setup. The panel lists unavailable providers and their reasons.
 **Save policy** writes the source file after preview and a check for concurrent edits.
 Existing policy bytes remain unchanged unless the user edits them.
 If `.safehouse` is absent and automatic routing is not explicitly enabled, new ordinary-provider launches keep their native behavior.
@@ -87,6 +88,9 @@ The plugin adds variants such as `pi-safehouse`, with `extends: "pi"` and a comm
 
 The generated bootstrap quotes each configured command element literally, then appends Paseo’s protocol arguments.
 Session environment selects the protected policy snapshot.
+Setup collects valid environment names explicitly configured on the source and its base provider.
+Both bootstrap branches pass these names through Safehouse. The bootstrap contains names, not environment values.
+Policy, daemon, loader, Node and shell-control variables remain blocked. Unlisted daemon variables retain Safehouse’s default sanitization.
 Ordinary provider configuration remains intact. Installation rejects collisions with unrelated provider entries.
 Explicit command arrays support built-in factories and direct derivatives of those factories.
 A derived variant extends the same built-in and retains source overrides, including native environment and tool-restriction inheritance.
@@ -153,7 +157,9 @@ The opening hook resolves the source again before preparing the snapshot. Later 
 
 The ordinary provider supplies the picker’s model catalog before workspace routing occurs.
 This discovery retains Paseo’s host-side behavior and is outside the harness sandbox guarantee.
-The creation hook must preserve a concrete model before selecting the variant.
+The creation hook preserves a selected or default model before selecting the variant.
+A generic ACP harness can start without a model when its native catalog is empty.
+Other empty-catalog cases report the selected provider and explicit ordinary-launch recovery.
 
 Variant discovery bypasses the opening hook and receives the provider’s default environment.
 The bootstrap changes its directory to `/` and starts Safehouse with an explicitly empty workdir grant.

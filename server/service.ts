@@ -150,7 +150,7 @@ async function setupLocked(
   const sources: Record<string, Source> = { ...old?.sources };
   const unavailable: Record<string, string> = {};
   const bootstraps: { file: string; text: string }[] = [];
-  const wrappers: { host: string; base: string; config: ProviderConfig; command: string[] }[] = [];
+  const wrappers: { host: string; base: string; config: ProviderConfig; command: string[]; envPass: string[] }[] = [];
   const protectedPaths = [
     details.source,
     binary,
@@ -162,8 +162,8 @@ async function setupLocked(
     if (old?.entries[host]) continue;
     let resolved;
     try { resolved = await configuredProvider(host, current); }
-    catch (e) { unavailable[host] = String(e); continue; }
-    const { base, config, command } = resolved;
+    catch (e) { unavailable[host] = e instanceof Error ? e.message : String(e); continue; }
+    const { base, config, command, envPass } = resolved;
     const executable = command[0];
     const id = variant(host);
     if (current[id] && !isDeepStrictEqual(current[id], old?.entries[id]))
@@ -171,7 +171,7 @@ async function setupLocked(
         `Provider ${id} belongs to another configuration. It was not changed.`,
       );
     protectedPaths.push(executable, await fs.realpath(executable));
-    wrappers.push({ host, base, config, command });
+    wrappers.push({ host, base, config, command, envPass });
     sources[id] = { provider: host, base, source: current[host] ?? null, baseSource: current[base] ?? null };
   }
   if (!wrappers.length && !Object.keys(entries).length)
@@ -185,8 +185,8 @@ async function setupLocked(
   const mainPort = Number(mainPid?.listen?.split(":").at(-1));
   const guardText = guardProfile([root, details.home, mainHome], protectedPaths, [details.port, ...(mainPort ? [mainPort] : [])]);
   const guard = path.join(root, `guard-${hash(guardText).slice(0, 16)}.sb`);
-  for (const { host, base, config, command } of wrappers) {
-    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions });
+  for (const { host, base, config, command, envPass } of wrappers) {
+    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions, envPass });
     const file = path.join(root, "launchers", `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`);
     bootstraps.push({ file, text });
     entries[variant(host)] = { ...config, extends: base,
@@ -223,7 +223,7 @@ async function ready(paseo: Paseo, provider?: string) {
     const source = saved.sources?.[provider];
     if (source && (!isDeepStrictEqual(current[source.provider] ?? null, source.source) ||
         !isDeepStrictEqual(current[source.base] ?? null, source.baseSource)))
-      throw launchError(source.provider, "configuration changed; Configure Safehouse again");
+      throw launchError(source.provider, "configuration changed; use Refresh providers in the Safehouse panel");
     if (
       !saved.entries[provider] ||
       !isDeepStrictEqual(entry, saved.entries[provider])
@@ -284,15 +284,21 @@ export async function routeCreation(
   const selected = installed?.entries[request.config.provider];
   const choice = await routingChoice(cwd);
   if (!selected && choice === false) return request;
-  const raw = await readSource(cwd);
+  const recover = <T>(operation: Promise<T>) => operation.catch((error: unknown) => {
+    if (error instanceof Error && error.name === "SafehouseLaunchError") throw error;
+    throw launchError(request.config.provider, error instanceof Error ? error.message : String(error));
+  });
+  const raw = await recover(readSource(cwd));
   if (!selected && choice !== true && raw === null) return request;
   macOnly();
   const provider = selected ? request.config.provider : variant(request.config.provider);
   const host = installed?.sources?.[provider]?.base ?? (selected ? native(provider) : request.config.provider);
-  if (!installed?.entries[provider] || !host)
-    throw launchError(request.config.provider, installed?.unavailable?.[request.config.provider] ?? "Configure Safehouse again to wrap this provider");
-  const saved = await ready(paseo, provider);
-  await loadPolicy(cwd, saved.features);
+  if (!installed?.entries[provider] || !host) {
+    await recover(configuredProvider(request.config.provider, (await paseo.config.get()).config.providers ?? {}));
+    throw launchError(request.config.provider, "Refresh providers in the Safehouse panel to wrap this provider");
+  }
+  const saved = await recover(ready(paseo, provider));
+  await recover(loadPolicy(cwd, saved.features));
   if (Object.keys(request.config.mcpServers ?? {}).length)
     throw new Error(
       "Safehouse requires review of external MCP bridges before launch.",
@@ -300,12 +306,12 @@ export async function routeCreation(
   let model = request.config.model;
   if (!model) {
     const original = installed.sources?.[provider]?.provider ?? host;
-    const catalog = await paseo.providers.listModels(original, { cwd });
+    const catalog = await recover(paseo.providers.listModels(original, { cwd }));
     const models = catalog.models ?? [];
     model = (models.find((m) => m.isDefault) ?? models[0])?.id;
-    if (!model)
-      throw new Error(
-        `Select a ${host} model before launching with Safehouse.`,
+    if (!model && host !== "acp")
+      throw launchError(request.config.provider,
+        `No model is available for ${request.config.provider}; select or configure a model before launching`,
       );
   }
   return {
@@ -424,6 +430,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     digest: policy?.digest ?? null,
     policyValid,
     error: routingError ?? error,
+    unavailable: saved?.unavailable ?? {},
     features: saved?.features ?? [],
     agents,
   };

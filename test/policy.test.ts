@@ -455,6 +455,9 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   };
   const originals = JSON.parse(JSON.stringify(providers));
   const paseo = {
+    workspaces: { ref: () => ({ refresh: async () => ({ workspaceDirectory: base }) }) },
+    agents: { list: async () => ({ entries: [] }) },
+    providers: { listModels: async () => ({ models: [] }) },
     config: { get: async () => ({ config: { providers } }), patch: async (patch: any) => Object.assign(providers, patch.providers) },
   } as unknown as Parameters<typeof setup>[0];
   await setup(paseo);
@@ -466,13 +469,26 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   assert.equal(providers["plugin-safehouse"], undefined);
   await fs.writeFile(path.join(base, ".safehouse"), "");
   const request = { config: { cwd: base, provider: "custom", model: "fixture", modeId: "auto", providerOptions: { own: true } } };
+  const modelLess = await routeCreation({ config: { cwd: base, provider: "generic" } }, paseo);
+  assert.equal(modelLess.config.provider, "generic-safehouse");
+  assert.equal(modelLess.config.model, undefined);
+  assert.match((await status(paseo, "fixture")).unavailable.plugin, /identity/);
   const result = await routeCreation(request, paseo);
   assert.equal(result.config.provider, "custom-safehouse");
   assert.deepEqual(result.config.providerOptions, { own: true });
   assert.equal(result.config.modeId, "auto");
   await assert.rejects(routeCreation({ config: { ...request.config, provider: "plugin" } }, paseo), /Disable automatic Safehouse/);
+  providers.added = { extends: "acp", label: "Added", command: [process.execPath] };
+  await assert.rejects(routeCreation({ config: { cwd: base, provider: "added" } }, paseo), /Refresh providers.*Disable automatic Safehouse/);
+  await assert.rejects(routeCreation({ config: { cwd: base, provider: "opencode" } }, paseo), /explicit command array.*Disable automatic Safehouse/);
+  await assert.rejects(routeCreation({ config: { cwd: base, provider: "custom" } }, paseo), /No model.*custom.*Disable automatic Safehouse/);
+  await fs.writeFile(path.join(base, ".safehouse"), "invalid=setting");
+  await assert.rejects(routeCreation(request, paseo), /unsupported setting.*Disable automatic Safehouse/);
+  await fs.rm(path.join(base, ".safehouse"));
+  await assert.rejects(routeCreation({ config: { ...request.config, provider: "custom-safehouse" } }, paseo), /launching or resuming.*Disable automatic Safehouse/);
+  await fs.writeFile(path.join(base, ".safehouse"), "");
   providers.copilot.env.BASE = "changed";
-  await assert.rejects(routeCreation(request, paseo), /Configure Safehouse again/);
+  await assert.rejects(routeCreation(request, paseo), /Refresh providers/);
   assert.equal(request.config.provider, "custom");
 });
 
