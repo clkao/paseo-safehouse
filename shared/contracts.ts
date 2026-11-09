@@ -68,10 +68,10 @@ export const reloadRpc = defineRpc({
 });
 export const headerLabel = (state: string) =>
   ({
-    ready: "Safehouse auto on",
+    ready: "Safehouse On",
     invalid: "Safehouse error",
-    absent: "Safehouse auto off",
-    off: "Safehouse auto off",
+    absent: "Safehouse Off",
+    off: "Safehouse Off",
     unsupported: "Safehouse unavailable",
     setup: "Safehouse setup",
   })[state] ?? "Safehouse checking";

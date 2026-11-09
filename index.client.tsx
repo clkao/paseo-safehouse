@@ -99,6 +99,7 @@ export default function contribute(client: PluginClientContext) {
                 ? "Safehouse · policy changed"
                 : "Safehouse · policy prepared"
               : "Safehouse · no launch record";
+            const displayLabel = agent.preparedAt ? agent.changed ? "Changed" : "On" : "Unknown";
             if (!pills.has(agent.id))
               pills.set(
                 agent.id,
@@ -108,13 +109,13 @@ export default function contribute(client: PluginClientContext) {
                   agentId: agent.id,
                   button: {
                     title: label,
-                    label,
+                    label: displayLabel,
                     icon: "ShieldCheck",
                     behavior,
                   },
                 }),
               );
-            else pills.get(agent.id)!.update({ title: label, label });
+            else pills.get(agent.id)!.update({ title: label, label: displayLabel });
           }
         } catch {
           headers.get(id)?.update({
