@@ -30,7 +30,7 @@ async function fixture(t: any) {
     await fs.rm(dir, { recursive: true, force: true });
   });
   const configFile = path.join(dir, "providers.json");
-  const initial = { providers: { pi: { env: { USER_OPTION: "kept" }, models: [{ id: "native", label: "Native" }] }, peer: { label: "Peer", extends: "pi", command: ["peer"] } }, plugins: { peer: { enabled: true } } };
+  const initial = { providers: { pi: { paseoTools: { enabled: true }, env: { USER_OPTION: "kept" }, models: [{ id: "native", label: "Native" }] }, peer: { label: "Peer", extends: "pi", command: ["peer"] } }, plugins: { peer: { enabled: true } } };
   await fs.writeFile(configFile, JSON.stringify(initial));
   let patches = 0;
   const get = async () => JSON.parse(await fs.readFile(configFile, "utf8"));
@@ -57,6 +57,8 @@ await setup({config:{get:async()=>({config:JSON.parse(await fs.readFile(file,'ut
   const saved = JSON.parse(await fs.readFile(path.join(f.root, "installation.json"), "utf8"));
   const current = await f.get();
   assert.deepEqual(current.providers["pi-safehouse"], saved.entries["pi-safehouse"]);
+  assert.equal(current.providers["pi-safehouse"].paseoTools.enabled, false);
+  assert.equal(current.providers.pi.paseoTools.enabled, true);
   assert.deepEqual(current.providers.pi, f.initial.providers.pi);
   assert.deepEqual(current.providers.peer, f.initial.providers.peer);
   assert.deepEqual(current.plugins, f.initial.plugins);
