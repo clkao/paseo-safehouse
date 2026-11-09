@@ -71,6 +71,48 @@ socket.on('connect',()=>{result.network='allowed';socket.destroy()});
 socket.on('error',e=>{result.network=e.code});socket.on('timeout',()=>{result.network='timeout';socket.destroy()});
 socket.on('close',()=>console.log(JSON.stringify(result)));`,
     );
+    const sibling = path.join(base, "private", "canary");
+    const empty = await resolvePolicy("", cwd, []);
+    const clean = await prepareSnapshot(root, empty);
+    const accessProbe = `const fs=require('node:fs'); const result={};
+const attempt=(k,f)=>{try{result[k]=f()??'allowed'}catch(e){result[k]=e.code}};
+attempt('read',()=>fs.readFileSync(${JSON.stringify(script)},'utf8').length>0);
+attempt('write',()=>fs.writeFileSync(${JSON.stringify(path.join(cwd, "allowed"))},'ok'));
+attempt('siblingRead',()=>fs.readFileSync(${JSON.stringify(sibling)},'utf8'));
+attempt('siblingWrite',()=>fs.writeFileSync(${JSON.stringify(sibling)},'changed'));
+console.log(JSON.stringify(result));`;
+    const probeAccess = async (snapshotPath: string) => JSON.parse((await run(
+      "/bin/sh", [bootstrap, "-e", accessProbe], {
+        cwd, env: policyEnvironment(process.env, snapshotPath), timeout: 45000,
+      },
+    )).stdout);
+    const assertAccess = (result: Record<string, unknown>) => {
+      assert.equal(result.read, true);
+      assert.equal(result.write, "allowed");
+      assert.equal(result.siblingRead, "EPERM");
+      assert.equal(result.siblingWrite, "EPERM");
+    };
+    const access = await probeAccess(clean);
+    t.diagnostic(`Empty-policy access: ${JSON.stringify(access)}`);
+    assertAccess(access);
+    assert.equal(await fs.readFile(sibling, "utf8"), "fixture");
+    assert.equal(await fs.readFile(path.join(cwd, "allowed"), "utf8"), "ok");
+    // An extra sibling grant must make the same denial grader fail.
+    await fs.appendFile(path.join(clean, ".safehouse"), `add-dirs=${path.dirname(sibling)}\n`);
+    const control = await probeAccess(clean);
+    t.diagnostic(`Sibling-grant negative control: ${JSON.stringify(control)}`);
+    assert.throws(() => assertAccess(control), assert.AssertionError);
+    assert.equal(control.siblingRead, "fixture");
+    assert.equal(control.siblingWrite, "allowed");
+    assert.equal(await fs.readFile(sibling, "utf8"), "changed");
+    await fs.writeFile(sibling, "fixture");
+    const malicious = path.join(base, `workspace\nadd-dirs=${path.dirname(sibling)}\n#`);
+    await fs.mkdir(malicious, { recursive: true });
+    const before = await fs.readdir(path.join(root, "snapshots"));
+    await assert.rejects(async () => prepareSnapshot(root,
+      await resolvePolicy("", malicious, [])), /Safehouse paths cannot contain/);
+    assert.deepEqual(await fs.readdir(path.join(root, "snapshots")), before);
+    t.diagnostic("Malicious workspace rejected before bootstrap execution");
     const started = Date.now();
     const probe = await fs.readFile(script, "utf8");
     const output = await run("/bin/sh", [bootstrap, "-e", probe], {
