@@ -8,7 +8,7 @@ export const connection = JSON.parse(
   fs.readFileSync(path.join(home, "paseo.pid"), "utf8"),
 ).listen;
 export const client = createHostClient(connection, {
-  clientId: "safehouse-direct-validation",
+  clientId: "safehouse-validation",
   clientType: "cli",
   localCredential: () =>
     fs.readFileSync(path.join(home, "local-credential"), "utf8").trim(),
@@ -16,7 +16,7 @@ export const client = createHostClient(connection, {
 });
 export const rpc = (method, input) =>
   client.invokePluginRpc(
-    "paseo-safehouse-direct",
+    "paseo-safehouse",
     `safehouse.${method}`,
     input,
   );

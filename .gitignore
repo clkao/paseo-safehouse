@@ -1,3 +1,5 @@
 node_modules/
 .local/
 *.tsbuildinfo
+.worktrees/
+docs/dev/.spacedock-state/

@@ -13,7 +13,7 @@ const marker = `BOOTSTRAP-${randomUUID()}`;
 const fixture = fs.mkdtempSync(
   path.join(path.dirname(cwd), ".safehouse-bootstrap-probe-"),
 );
-const protectedFile = path.join(home, "safehouse-direct", marker);
+const protectedFile = path.join(home, "safehouse", marker);
 const policyFile = path.join(cwd, ".safehouse");
 const policyHash = () =>
   createHash("sha256").update(fs.readFileSync(policyFile)).digest("hex");
@@ -84,14 +84,14 @@ async function collect(id, phase) {
 try {
   await client.connect();
   for (const provider of [
-    "pi-safehouse-direct",
-    "claude-safehouse-direct",
-    "codex-safehouse-direct",
+    "pi-safehouse",
+    "claude-safehouse",
+    "codex-safehouse",
   ]) {
     const catalog = await client.listProviderModels(provider, { cwd });
     assert.equal(catalog.error, null, provider);
     assert.ok(catalog.models.length, provider);
-    if (provider === "pi-safehouse-direct")
+    if (provider === "pi-safehouse")
       assert.ok(catalog.models.some((m) => m.id === model));
     evidence.catalogs[provider] = catalog.models.length;
   }
@@ -104,7 +104,7 @@ try {
     title: "ASR · Pi DeepSeek · catalog bootstrap validation",
   });
   evidence.agentId = agent.id;
-  assert.equal(agent.provider, "pi-safehouse-direct");
+  assert.equal(agent.provider, "pi-safehouse");
   fs.writeFileSync(
     ".local/catalog-bootstrap-agent.json",
     JSON.stringify(agent, null, 2),
@@ -124,7 +124,7 @@ try {
   assert.equal((await client.fetchAgent(agent.id)).agent.status, "idle");
   const receiptFile = path.join(
     home,
-    "safehouse-direct",
+    "safehouse",
     "agents",
     `${createHash("sha256").update(agent.id).digest("hex")}.json`,
   );

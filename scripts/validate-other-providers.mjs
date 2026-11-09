@@ -12,7 +12,7 @@ try {
         workspaceId,
         cwd,
         provider,
-        title: `ASR · ${provider} · direct launch check`,
+        title: `ASR · ${provider} · sandbox launch check`,
       });
       results.push({ provider, result: "created", agent });
       console.log(

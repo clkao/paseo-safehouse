@@ -72,13 +72,13 @@ The original ASR Pi agent remains available and idle. No existing agent was relo
 Per-agent disable waits for the native launch-form extension. Each new draft will derive its default from the workspace policy.
 
 The user confirmed that the workspace header is visible. Full desktop launch and panel acceptance remains open.
-The panel and command center identify this plugin as **Safehouse Direct** to distinguish it from the older Safehouse plugin.
+The panel and command center identify the plugin as **Safehouse**. Provider IDs in the evidence below identify the tested pre-rename installation.
 Header and composer contributions use valid, context-scoped button IDs. Paseo rejects underscores in button IDs.
 Agent indicators report policy preparation, not verified sandbox activity.
 Snapshot cleanup, install removal, interruption tests, and remaining provider acceptance are still open.
 
 Local test records live under ignored `.local/` state.
-The isolated daemon and the direct Pi test agent remain available for continued validation.
+The recorded development daemon and Pi test agent remain available for read-only reference. New development uses a separate daemon for the renamed plugin.
 
 ## Catalog bootstrap validation
 

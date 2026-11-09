@@ -6,11 +6,11 @@ const agent = JSON.parse(fs.readFileSync(".local/agent.json", "utf8"));
 const token = randomUUID();
 const fixture = path.join(
   "/Users/clkao/git",
-  `.safehouse-direct-probe-${token}`,
+  `.safehouse-probe-${token}`,
 );
 fs.mkdirSync(fixture);
 fs.writeFileSync(path.join(fixture, "canary"), "dummy");
-const root = path.join(home, "safehouse-direct");
+const root = path.join(home, "safehouse");
 fs.writeFileSync(path.join(root, "test-canary"), "dummy");
 const marker = `DIRECT-SAFEHOUSE-${token}`;
 const code = `import os,json,socket,tempfile

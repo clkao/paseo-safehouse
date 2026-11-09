@@ -21,7 +21,7 @@ try {
   console.log("status", status.state, status.configured);
   const agent = await client.createAgent({
     ...create,
-    title: "ASR · Pi DeepSeek · Safehouse Direct",
+    title: "ASR · Pi DeepSeek · Safehouse",
   });
   fs.writeFileSync(".local/agent.json", JSON.stringify(agent, null, 2));
   console.log("agent", JSON.stringify(agent));

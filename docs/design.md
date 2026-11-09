@@ -69,7 +69,7 @@ Ordinary provider selection
 
 ### Provider configuration
 
-The plugin adds variants such as `pi-safehouse-direct`, with `extends: "pi"` and a command array of this form:
+The plugin adds variants such as `pi-safehouse`, with `extends: "pi"` and a command array of this form:
 
 ```json
 ["/bin/sh", "/protected/launchers/pi-<content-hash>.sh"]

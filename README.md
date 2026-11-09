@@ -1,4 +1,4 @@
-# Safehouse for Paseo
+# Paseo Safehouse
 
 Workspace access policies for Paseo agents on macOS.
 
@@ -13,7 +13,7 @@ The workspace policy applies across supported providers while Paseo manages conv
 1. Open a workspace that contains `.safehouse`.
 2. The workspace header shows **Safehouse on** when providers are configured and the policy resolves successfully.
 3. Select a provider and model, then start an agent.
-4. To inspect or change access, open **Safehouse Direct**, choose **Review access**, and save edits with **Save policy**.
+4. To inspect or change access, open **Safehouse**, choose **Review access**, and save edits with **Save policy**.
 5. To apply policy changes to an existing agent, reload that agent.
 
 Without `.safehouse`, the header shows **Safehouse off**. The panel can create a policy from directory grants and optional capabilities.
@@ -35,6 +35,9 @@ The [design](docs/design.md#provider-discovery) describes catalog extension conf
 
 ## Development
 
+Development is managed by the [Spacedock dev workflow](docs/dev/README.md).
+The development agent runs outside Safehouse and uses an isolated daemon for sandboxed test agents.
+
 The prototype requires Paseo 0.15.2 and Safehouse 0.12.0 on the daemon host.
 Development uses the SDK 0.14 lifecycle aliases that Paseo 0.15.2 supports.
 
@@ -45,8 +48,8 @@ npm test
 paseo plugin install "$PWD" --home /path/to/development-daemon-home
 ```
 
-Use a separate daemon for development. In the **Safehouse Direct** panel, configure providers before launching sandboxed agents.
-The command center entry is **Configure or review Safehouse Direct**.
+Use a separate daemon for development. In the **Safehouse** panel, configure providers before launching sandboxed agents.
+The command center entry is **Configure or review Safehouse**.
 The macOS test runs real sandbox probes against temporary fixtures.
 
 - [Design](docs/design.md): architecture, policy loading, lifecycle integration, and security boundary.

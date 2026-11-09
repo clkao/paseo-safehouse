@@ -6,14 +6,14 @@ export default function contribute(client: PluginClientContext) {
   const cleanups = [
     client.addWorkspacePanel({
       id: "safehouse",
-      title: "Safehouse Direct",
+      title: "Safehouse",
       icon: "ShieldCheck",
       locations: ["workspace", "explorer"],
       Component: SafehousePanel,
     }),
     client.addCommandCenterItem({
       id: "safehouse",
-      title: "Configure or review Safehouse Direct",
+      title: "Configure or review Safehouse",
       icon: "ShieldCheck",
       context: "workspace",
       keywords: ["sandbox", "permissions"],

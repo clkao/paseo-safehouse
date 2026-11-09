@@ -17,7 +17,7 @@ const marker = `CODEX-AUTOMATIC-${randomUUID()}`;
 const fixture = fs.mkdtempSync(
   path.join(path.dirname(cwd), ".safehouse-mode-probe-"),
 );
-const protectedFile = path.join(home, "safehouse-direct", marker);
+const protectedFile = path.join(home, "safehouse", marker);
 const policyPath = path.join(cwd, ".safehouse");
 const policyHash = () =>
   createHash("sha256").update(fs.readFileSync(policyPath)).digest("hex");
@@ -58,7 +58,7 @@ try {
     ".local/codex-automatic.json",
     JSON.stringify(agent, null, 2),
   );
-  assert.equal(agent.provider, "codex-safehouse-direct");
+  assert.equal(agent.provider, "codex-safehouse");
   assert.equal(agent.currentModeId, "full-access");
   console.log(
     JSON.stringify({

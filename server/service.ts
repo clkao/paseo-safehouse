@@ -29,14 +29,14 @@ import {
 } from "./policy";
 
 type Paseo = PluginHandlerContext["paseo"];
-export const PLUGIN_ID = "paseo-safehouse-direct";
+export const PLUGIN_ID = "paseo-safehouse";
 export const HOSTS = ["pi", "claude", "codex"] as const;
-export const variant = (provider: string) => `${provider}-safehouse-direct`;
+export const variant = (provider: string) => `${provider}-safehouse`;
 export const native = (provider: string) =>
   HOSTS.find((host) => variant(host) === provider);
 export const daemonHome = () =>
   path.resolve(process.env.PASEO_HOME || path.join(homedir(), ".paseo"));
-export const stateRoot = () => path.join(daemonHome(), "safehouse-direct");
+export const stateRoot = () => path.join(daemonHome(), "safehouse");
 type Variant = {
   extends: string;
   label: string;
@@ -83,12 +83,12 @@ async function daemonDetails() {
   const listen = pid?.listen ?? config?.daemon?.listen;
   if (!listen || !/^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(listen))
     throw new Error(
-      "Safehouse Direct currently requires a loopback TCP daemon.",
+      "Safehouse currently requires a loopback TCP daemon.",
     );
   const source = config?.plugins?.[PLUGIN_ID]?.path;
   if (!source)
     throw new Error(
-      "Install Safehouse Direct from its local directory before setup.",
+      "Install Safehouse from its local directory before setup.",
     );
   return {
     home,
@@ -135,7 +135,7 @@ export async function setup(
     if (!executable) continue;
     if (current[host]?.command)
       throw new Error(
-        `The ${host} provider has a custom command. Direct launch requires a native executable configuration.`,
+        `The ${host} provider has a custom command. Safehouse launch requires a native executable configuration.`,
       );
     const id = variant(host);
     if (current[id] && !isDeepStrictEqual(current[id], old?.entries[id]))
@@ -278,7 +278,7 @@ export async function routeCreation(
   await loadPolicy(cwd, saved.features);
   if (Object.keys(request.config.mcpServers ?? {}).length)
     throw new Error(
-      "Safehouse Direct requires review of external MCP bridges before launch.",
+      "Safehouse requires review of external MCP bridges before launch.",
     );
   let model = request.config.model;
   if (!model) {
@@ -311,7 +311,7 @@ export async function prepareOpening(
   const policy = await loadPolicy(cwd, saved.features);
   if (request.tools.length || Object.keys(request.mcpServers).length)
     throw new Error(
-      "Safehouse Direct cannot authorize daemon-side plugin tools or MCP bridges.",
+      "Safehouse cannot authorize daemon-side plugin tools or MCP bridges.",
     );
   const snapshot = await prepareSnapshot(stateRoot(), policy);
   await atomicJson(receiptPath(request.agentId), {
@@ -399,7 +399,7 @@ export async function reload(
   await agent.refresh();
   const provider = agent.current()?.provider ?? "";
   if (agent.workspaceId !== workspaceId || !native(provider))
-    throw new Error("Select a Safehouse Direct agent in this workspace.");
+    throw new Error("Select a Safehouse agent in this workspace.");
   const saved = await ready(paseo, provider);
   await loadPolicy(await workspaceCwd(paseo, workspaceId), saved.features);
   const current = agent as typeof agent & { reload(): Promise<unknown> };

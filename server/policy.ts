@@ -260,7 +260,7 @@ export async function savePolicy(
   expectedRevision: string,
 ) {
   const file = path.join(cwd, ".safehouse");
-  const lock = await fs.open(`${file}.safehouse-direct-lock`, "wx", 0o600);
+  const lock = await fs.open(`${file}.safehouse-lock`, "wx", 0o600);
   try {
     const current = await readSource(cwd);
     if (hash(current ?? "") !== expectedRevision)
@@ -268,6 +268,6 @@ export async function savePolicy(
     if (current !== policy.raw) await atomicWrite(file, policy.raw);
   } finally {
     await lock.close();
-    await fs.rm(`${file}.safehouse-direct-lock`, { force: true });
+    await fs.rm(`${file}.safehouse-lock`, { force: true });
   }
 }

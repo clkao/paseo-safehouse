@@ -102,7 +102,7 @@ test("unmanaged workspaces retain ordinary provider selection without daemon cal
       assert.equal(await routeCreation(request, forbidden), request);
     }
   }
-  assert.equal(variant("pi"), "pi-safehouse-direct");
+  assert.equal(variant("pi"), "pi-safehouse");
 });
 
 test(
@@ -111,7 +111,7 @@ test(
   async (t) => {
     const base = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-routing-"));
     const home = path.join(base, "daemon"),
-      root = path.join(home, "safehouse-direct");
+      root = path.join(home, "safehouse");
     const previousHome = process.env.PASEO_HOME;
     process.env.PASEO_HOME = home;
     t.after(async () => {
@@ -123,7 +123,7 @@ test(
     const canonicalHome = await fs.realpath(home);
     await atomicJson(path.join(home, "config.json"), {
       daemon: { listen: "127.0.0.1:45678" },
-      plugins: { "paseo-safehouse-direct": { path: base } },
+      plugins: { "paseo-safehouse": { path: base } },
     });
     const entry = {
       extends: "pi",

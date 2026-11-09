@@ -144,7 +144,7 @@ export function SafehousePanel({
     >
       <View style={{ gap: 5 }}>
         <Text style={{ ...text, fontSize: 23, fontWeight: "500" }}>
-          Safehouse Direct
+          Safehouse
         </Text>
         <Text style={muted}>
           {data ? headerLabel(data.state) : "Checking workspace…"}
@@ -388,7 +388,7 @@ export function SafehousePanel({
                 <Text style={{ ...text, fontWeight: "500" }}>Agents</Text>
                 {data.agents.length === 0 ? (
                   <Text style={muted}>
-                    No Safehouse Direct agents in this workspace.
+                    No Safehouse agents in this workspace.
                   </Text>
                 ) : (
                   data.agents.map((agent) => (

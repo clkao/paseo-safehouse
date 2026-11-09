@@ -22,7 +22,7 @@ test(
     const binary = await findExecutable("safehouse");
     assert.ok(binary, "Safehouse must be installed");
     const base = await fs.mkdtemp(
-      path.join(os.homedir(), ".safehouse-direct-test-"),
+      path.join(os.homedir(), ".safehouse-test-"),
     );
     t.after(() => fs.rm(base, { recursive: true, force: true }));
     for (const name of ["workspace", "readonly", "private", "state"])
