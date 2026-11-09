@@ -1,28 +1,49 @@
 # Implementation status
 
-## Scope
+## Current candidate
 
-The implementation targets Safehouse provider variants with automatic workspace policy detection.
-Current beta acceptance targets an isolated Paseo 0.15.3 daemon. Historical probes below used 0.15.2.
-The plugin is also installed on the main daemon. Plugin reloads must preserve existing sessions.
+The local human-test candidate is `d42c994fc2bde3f1adc40010e09fe25be2740a2e`.
+It targets clean isolated Paseo 0.15.3 and Safehouse 0.12.0 installations.
+The candidate is installed from its exact archive on the isolated `human-beta` daemon.
+The main daemon retains its existing installation and sessions. This candidate does not replace it.
 
-## Work
+The archive contains 13 runtime files. Independent review matched the archive, extracted files and integrated source.
+TypeScript checks passed. The 74 relevant tests passed, including the installed-registry check.
+The exact archive passed setup, compilation, policy RPCs, and a real Codex launch and reload.
+Both turns allowed workspace access and denied sibling, policy, protected-state and daemon-port access.
+Native conversation identity survived process replacement.
 
-- [x] Specify workspace detection, routing, and header behavior.
-- [x] Implement protected policy snapshots and direct command configuration.
-- [x] Implement creation and opening hooks.
-- [x] Implement the policy panel and automatic workspace header status.
-- [x] Establish routing, policy validation, isolation, and macOS sandbox tests.
-- [x] Complete the Pi acceptance journey on an isolated daemon through the ordinary-provider API.
-- [x] Verify automatic Codex Full Access selection with regression tests and a live sandbox probe.
-- [ ] Complete the desktop launch-screen and policy-panel acceptance journey.
-- [ ] Validate Claude and Codex independently.
-- [x] Draft the workspace capability broker design and identify the minimum Subspace integration.
-- [x] Draft native launch-form controls for status and a per-agent Safehouse choice.
-- [x] Implement the workspace enable/disable menu and command wrapping. Interactive recovery and continuity checks remain open.
-- [x] Verify automatic policy trust and installed status data for concise header labels.
-- [x] Validate restricted catalog discovery through a protected bootstrap on the development daemon.
-- [ ] Resolve the release-review findings before general distribution.
+The candidate is ready for disposable human tests. It is not ready for publication.
+The Opus 5.5 staff review identified unresolved launch, setup and policy-authority issues.
+Rendered UI acceptance and the complete provider lifecycle matrix remain open.
+
+## Human test connection
+
+1. In Paseo on the daemon Mac, open the host selector.
+2. Select **Add host**, then **Direct connection**.
+3. Enter host `127.0.0.1` and port `63227`.
+4. Leave the password blank and **Use SSL** off.
+5. Connect and open **Safehouse beta human test**.
+
+This connection selects the isolated daemon. Relay pairing is not required.
+The test window remains open until the first officer records its completion and teardown.
+
+## Work and evidence
+
+| Area | Current result | Remaining work |
+| --- | --- | --- |
+| Policy serialization | Delimiter regressions and independent sandbox checks passed. | Probe path identity changes and whitespace handling. |
+| Codex options | Creation and native resume passed independent 0.15.3 checks. | Retain evidence at the final integrated revision. |
+| Workspace controls | Persistent routing, literal argv and live continuity passed. | Provider environment, refresh action, model-less launch behavior and rendered UI. |
+| Setup recovery | Interrupted-plan recovery and publication-order regression checks passed. | Removed providers and changing environment masks. |
+| MCP boundary | Process-boundary warning exists in documentation. | Remove residual MCP rejection and show an explicit panel warning. |
+| Pi discovery | Ordinary native picker and sandboxed tools passed with authorized extension dependencies. | Keep restricted variant catalog differences documented. |
+| Distribution | Exact archive and isolated installation passed bounded review. | Correct the manifest minimum and rebuild after reviewed fixes. |
+| Lifecycle acceptance | Codex artifact launch/reload passed. | Remaining provider, cancellation, concurrency, capability, profile and UI cases. |
+
+Task scope and durable reviews live in `docs/dev/.spacedock-state`.
+The staff report is `_handoff/opus-5.5-staff-review.md` within that state checkout.
+Existing checks establish their stated behaviors. They do not establish all release gates.
 
 ## Evidence and constraints
 
@@ -62,9 +83,9 @@ Each session retained its native conversation identity, recalled its marker, and
 Native Codex records reported `never` and `danger-full-access` in both phases. All boundary probes returned `EPERM` and policy hashes remained unchanged.
 An intentionally incorrect nonce expectation failed with exit status 1. An earlier disk-full interruption remains recorded in task state.
 Evidence files are under the task worktree’s ignored `.local/`: `codex-plain-default-evidence.json`, `codex-conflict-retry-evidence.json`, and `codex-provider-defaults-evidence.json`.
-Independent validation remains required.
+Independent validation passed for the Codex correction and its live creation/resume cases.
 
-## Validation evidence
+## Historical validation evidence: Paseo 0.15.2
 
 Validation date: 2026-11-08, America/Los_Angeles.
 Runtime: Paseo 0.15.2, Safehouse 0.12.0, macOS.
@@ -100,7 +121,8 @@ The main instance reloaded only `paseo-safehouse-direct`. The `email-triage-282`
 That status maps to **Safehouse on**. Visual confirmation of the updated label remains open.
 The original ASR Pi agent remains available and idle. No existing agent was reloaded.
 
-Workspace enable/disable uses the existing header-menu API. Per-draft controls require the future creation-form extension.
+The local candidate implements workspace automatic routing through the header-menu API. Rendered acceptance remains open.
+Per-draft controls require the future creation-form extension.
 
 The user confirmed that the workspace header is visible. Full desktop launch and panel acceptance remains open.
 The panel and command center identify the plugin as **Safehouse**. Provider IDs in the evidence below identify the tested pre-rename installation.
@@ -126,44 +148,25 @@ The workspace policy hash remained unchanged.
 The macOS regression test also denies workspace access during catalog discovery and rejects invalid bootstrap environment values.
 
 The bootstrap is configured only on the development daemon. The main daemon retains its previous provider commands.
-Existing main-daemon agents were not reloaded. General release remains blocked by the findings below.
+Existing main-daemon agents were not reloaded. This historical catalog evidence does not establish current release readiness.
 
-## Release review
+## Remaining release work
 
-Review scope: the current plugin, including the catalog bootstrap, against Paseo 0.15.2 and the official plugin documentation.
-Passing smoke tests establish specific behaviors, not the complete security boundary.
+1. Preserve configured provider environment through the sandbox boundary. Do not forward unsafe launch-control variables.
+2. Make provider refresh accessible and recover from removed providers without blocking unrelated workspaces.
+3. Remove MCP rejection that conflicts with the warning-only boundary.
+4. Reproduce policy symlink, ancestor-rename and whitespace risks. Correct confirmed boundary failures with independent sandbox evidence.
+5. Complete the existing profile, capability, provider lifecycle and rendered UI acceptance cases.
+6. Probe cwd routing, creation-hook timeout behavior and daemon execution of agent-written repository configuration.
+7. Align the manifest minimum with Paseo 0.15.3. Rebuild and check the exact final artifact after corrections.
 
-1. **High: workspace paths can inject policy directives.** `canonicalDirectory` accepts line breaks, and `prepareSnapshot` interpolates the workspace path into `.safehouse`.
-   A disposable workspace with an empty source policy produced an additional sibling grant through its path.
-   A real sandboxed read of that sibling succeeded with the fixed guard applied.
-   Reject policy delimiters in every serialized path, including workspace and generated state paths. Add adversarial serialization tests.
-2. **High: the bridge rejection does not cover other plugins.** `prepareOpening` checks `request.tools` and `request.mcpServers` as though they describe the final launch.
-   Paseo supplies plugin-local maps and merges contributions afterward. The check cannot reject another plugin’s tools or MCP servers.
-   The fixed daemon-port guard still applies, but it does not establish that all external capabilities were rejected.
-   Document the process boundary and warn about additional MCP authority. Do not prohibit other enabled plugins. See [Paseo hooks](https://paseo.sh/docs/plugins/hooks).
-3. **Codex option normalization implemented.** Creation persists compatible explicit sandbox and approval options after provider and policy validation.
-   The Codex permission configuration section records the new-session creation/resume evidence. Independent validation remains required.
-4. **Medium: partial setup cannot recover.** Provider configuration changes before the installation record is saved.
-   A simulated lost response after the host applied the patch left three variants installed without an ownership record.
-   Repeating setup rejected those variants as unrelated configuration. Add recoverable installation state and serialize concurrent setup operations.
-5. **Medium: Pi catalog discovery suppresses native extensions.** The bootstrap passes `--no-extensions` and requires separate extension paths.
-   Without that configuration, the catalog can omit models available to normal Pi sessions. The panel exposes no control for this list.
-   Ordinary-provider discovery already supplies current native models before routing.
-   On 0.15.3, an isolated Pi launch completed real tools with no catalog extension list after its fixture policy authorized an extension dependency.
-   Restricted variant discovery still differs; removing suppression fails on ungranted imports. Hold catalog edits and document this limit.
+The mechanism for a confirmed failure requires review before implementation.
+A hypothesis does not establish a release blocker. A missing required acceptance result still prevents a release claim.
+The workflow retains minor polling, status-copy and save-lock issues without making each one a publication blocker.
 
-Publication preparation also remains incomplete. The package is private, has no repository metadata, and the repository has no remote.
-The manifest has no interface image. The public listing must describe data access, provider traffic, requirements, and limitations.
-The package dry run includes all imported runtime modules and excludes `.local/`, but also includes development scripts and test files.
-Use an explicit package file list and exercise the exact distributable on a clean daemon before submission.
-Paseo requires an interface image for a visual plugin and an installable public source for registry submission. See [publishing](https://paseo.sh/docs/plugins/publishing).
-
-The runtime directory boundaries, schema-defined RPCs, host libraries in development dependencies, version upper bound, and timer cleanup follow the plugin contract.
-Align the development SDK with the supported Paseo release and migrate compatibility hook aliases to the documented `addHook` API.
-Use scoped observations or cached status instead of enumerating every workspace and agent from each client every five seconds.
-These practices follow the [plugin reference](https://paseo.sh/docs/plugins/reference).
-
-Claude resume, cancellation, plugin update/removal, clean installation, and full desktop acceptance remain unverified release gates.
+Public repository selection, registry submission and publication require a separate decision.
+The local package remains private. No remote is configured.
+This development workflow does not include installation migration, core patches, harness-specific panel controls or peer-plugin restrictions.
 
 ## Future upstream API opportunities
 
@@ -250,4 +253,29 @@ The recovered command read and wrote its workspace. Sibling reads and writes ret
 
 Use `scripts/validate-setup-recovery.mjs` with `node --import tsx` and an FO-allocated `SAFEHOUSE_TEST_HOME`.
 Run its `interrupt` phase, restart that isolated daemon, then run its `retry` phase.
+Run its `retire` phase after retry to check source removal, retained files, healthy reopen preparation, inactive rejection, and source restoration.
 The daemon requires the local plugin installation and disabled voice and dictation features.
+The retirement phase exercises the opening hook without creating or resuming a native conversation.
+Temporary-host regressions also cover unwrappable sources, deleted variants, edited inactive targets, and harmless stale masks.
+Genuine pending-plan conflicts and real source-field deletions still reject refresh.
+
+
+## Launch correction candidate
+
+The source correction adds explicit provider environment transport to both session and catalog subprocesses.
+Real child tests preserve source/base variables and source overrides while blocked controls and an unlisted sentinel remain absent.
+Only comparison results enter test output. Bootstrap files contain environment names, not values.
+
+The panel keeps **Refresh providers** visible after setup and displays unavailable-provider reasons.
+Creation errors distinguish a missing explicit command from a provider that needs refresh, and include ordinary-launch recovery.
+Saved-policy text respects automatic routing off. Missing-policy text applies to creation and resume.
+
+A disposable generic ACP fixture passed native creation with an empty catalog on Paseo 0.15.3.
+The same protocol started inside Safehouse without an invented model and denied sibling access.
+This establishes the generic ACP path only. Other adapters retain a provider-specific missing-model error.
+The isolated daemon also refreshed the new provider without changing its ordinary configuration, then launched its sandboxed variant with its environment intact.
+
+The repeatable tests are in `test/launch.test.ts`, `test/policy.test.ts`, and `test/sandbox.mac.test.ts`.
+Set the documented `PASEO_RUNTIME_MODULES` path to exercise the installed ACP adapter and registry.
+The rendered Refresh action, reasons, recovery flow and off/save text still require the human UI drive.
+The running human-beta artifact remains unchanged pending independent review and repackaging of this correction.

@@ -162,6 +162,10 @@ export function SafehousePanel({
       <Text style={muted}>
         Applies to new agents in this workspace across clients. Explicit Safehouse providers always use Safehouse. Existing agents keep their provider.
       </Text>
+      <Text style={muted}>
+        Safehouse limits the agent process and its children. Additional MCP
+        services can provide access outside that sandbox.
+      </Text>
       {error || routingError ? (
         <Text
           accessibilityRole="alert"
@@ -187,20 +191,17 @@ export function SafehousePanel({
         <Text style={muted}>A macOS daemon host is required.</Text>
       ) : (
         <>
+          <View style={{ gap: 8 }}>
+            {button("Refresh providers", () => void action(async () => {
+              await setup({});
+              setMessage("Safehouse providers refreshed.");
+            }))}
+            {Object.entries(data.unavailable).map(([provider, reason]) => (
+              <Text key={provider} selectable style={muted}>{provider}: {reason}</Text>
+            ))}
+          </View>
           {!data.configured ? (
-            <View style={{ gap: 8 }}>
-              <Text style={text}>
-                Configure provider variants on this daemon.
-              </Text>
-              {button(
-                "Set up providers",
-                () =>
-                  void action(async () => {
-                    await setup({});
-                    setMessage("Safehouse providers configured.");
-                  }),
-              )}
-            </View>
+            <Text style={text}>Refresh providers to configure Safehouse on this daemon.</Text>
           ) : (
             <>
               <Text style={muted}>
@@ -389,7 +390,9 @@ export function SafehousePanel({
                         setDirty(false);
                         setReviewed(null);
                         setMessage(
-                          "Policy saved. New agents use this policy. Reload an existing agent to apply it there.",
+                          data.routingEnabled
+                            ? "Policy saved. New Safehouse agents use it. Reload an existing Safehouse agent to apply it there."
+                            : "Policy saved. Automatic routing remains off. Explicit Safehouse agents use this policy; existing agents keep their provider.",
                         );
                       }),
                   )}
@@ -428,8 +431,7 @@ export function SafehousePanel({
               </View>
               <Text style={muted}>
                 Reload interrupts the selected agent’s active turn. Policy
-                preparation is not runtime verification. Daemon-side tools and
-                services have separate access.
+                preparation is not runtime verification.
               </Text>
             </>
           )}

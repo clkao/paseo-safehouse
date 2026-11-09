@@ -1,4 +1,5 @@
 import test from "node:test";
+import { z } from "zod";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import path from "node:path";
@@ -160,6 +161,8 @@ test(
       entries,
       guard: "/fixture/guard.sb",
     });
+    const plugins = { peer: { enabled: true } };
+    const pluginsBefore = structuredClone(plugins);
     const requestedCatalogs: string[] = [];
     const running = [{ agent: { id: "existing", workspaceId: "fixture", provider: "pi-safehouse", providerOptions: { keep: true } } }];
     const runningBefore = JSON.stringify(running);
@@ -172,7 +175,7 @@ test(
       agents: { list: async () => ({ entries: running }) },
       config: {
         get: async () => ({
-          config: { providers: entries },
+          config: { providers: entries, plugins },
         }),
       },
       providers: {
@@ -182,7 +185,7 @@ test(
         },
       },
     } as unknown as Parameters<typeof routeCreation>[1];
-    const workspaces = [];
+    const workspaces: string[] = [];
     for (const name of ["first", "second"]) {
       const cwd = path.join(base, name);
       await fs.mkdir(cwd);
@@ -211,6 +214,18 @@ test(
     assert.equal(routed.config.provider, variant("pi"));
     assert.equal(routed.config.model, "fixture/model");
     assert.deepEqual(requestedCatalogs, ["pi"]);
+    await t.test("explicit MCP creation preserves external authority", async () => {
+      const mcpServers = { peer: { type: "http" as const, url: "http://127.0.0.1:41800/mcp" } };
+      for (const provider of ["pi", variant("pi")]) {
+        const result = await routeCreation({ config: {
+          cwd: workspaces[0], provider, model: "fixture/model", mcpServers,
+        } }, paseo);
+        assert.equal(result.config.provider, "pi-safehouse");
+        assert.equal(result.config.mcpServers, mcpServers);
+        assert.deepEqual(result.config.mcpServers, { peer: { type: "http", url: "http://127.0.0.1:41800/mcp" } });
+      }
+      assert.deepEqual(plugins, pluginsBefore);
+    });
     const options = [
       undefined,
       { sandbox_mode: "read-only" },
@@ -329,6 +344,23 @@ test(
       tools: [],
       mcpServers: {},
       env: { SAFEHOUSE_WORKDIR: "/untrusted", SAFEHOUSE_ADD_DIRS: "/" },
+    });
+    await t.test("local MCP and tools preserve sandbox preparation on create, resume and history", async () => {
+      const mcpServers = { peer: { type: "http" as const, url: "http://127.0.0.1:41800/mcp" } };
+      const tools = [{ name: "peer_read", description: "Peer capability", input: z.object({}), execute: () => { throw new Error("Not invoked by preparation"); } }];
+      for (const reason of ["create", "resume"] as const) {
+        for (const purpose of ["interactive", "history"] as const) {
+          const request = { ...opening(workspaces[0], `peer-${reason}-${purpose}`), reason, purpose, mcpServers, tools };
+          const result = await prepareOpening(request, paseo);
+          assert.equal(result.mcpServers, mcpServers);
+          assert.equal(result.tools, tools);
+          assert.deepEqual(result.mcpServers, { peer: { type: "http", url: "http://127.0.0.1:41800/mcp" } });
+          assert.equal(result.env.SAFEHOUSE_ADD_DIRS, "");
+          assert.notEqual(result.env.SAFEHOUSE_WORKDIR, "/untrusted");
+          assert.ok((await fs.stat(path.join(result.env.SAFEHOUSE_WORKDIR, ".safehouse"))).isFile());
+        }
+      }
+      assert.deepEqual(plugins, pluginsBefore);
     });
     const [first, second] = await Promise.all(
       workspaces.map((cwd, i) =>
@@ -455,6 +487,9 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   };
   const originals = JSON.parse(JSON.stringify(providers));
   const paseo = {
+    workspaces: { ref: () => ({ refresh: async () => ({ workspaceDirectory: base }) }) },
+    agents: { list: async () => ({ entries: [] }) },
+    providers: { listModels: async () => ({ models: [] }) },
     config: { get: async () => ({ config: { providers } }), patch: async (patch: any) => Object.assign(providers, patch.providers) },
   } as unknown as Parameters<typeof setup>[0];
   await setup(paseo);
@@ -466,13 +501,26 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   assert.equal(providers["plugin-safehouse"], undefined);
   await fs.writeFile(path.join(base, ".safehouse"), "");
   const request = { config: { cwd: base, provider: "custom", model: "fixture", modeId: "auto", providerOptions: { own: true } } };
+  const modelLess = await routeCreation({ config: { cwd: base, provider: "generic" } }, paseo);
+  assert.equal(modelLess.config.provider, "generic-safehouse");
+  assert.equal(modelLess.config.model, undefined);
+  assert.match((await status(paseo, "fixture")).unavailable.plugin, /identity/);
   const result = await routeCreation(request, paseo);
   assert.equal(result.config.provider, "custom-safehouse");
   assert.deepEqual(result.config.providerOptions, { own: true });
   assert.equal(result.config.modeId, "auto");
   await assert.rejects(routeCreation({ config: { ...request.config, provider: "plugin" } }, paseo), /Disable automatic Safehouse/);
+  providers.added = { extends: "acp", label: "Added", command: [process.execPath] };
+  await assert.rejects(routeCreation({ config: { cwd: base, provider: "added" } }, paseo), /Refresh providers.*Disable automatic Safehouse/);
+  await assert.rejects(routeCreation({ config: { cwd: base, provider: "opencode" } }, paseo), /explicit command array.*Disable automatic Safehouse/);
+  await assert.rejects(routeCreation({ config: { cwd: base, provider: "custom" } }, paseo), /No model.*custom.*Disable automatic Safehouse/);
+  await fs.writeFile(path.join(base, ".safehouse"), "invalid=setting");
+  await assert.rejects(routeCreation(request, paseo), /unsupported setting.*Disable automatic Safehouse/);
+  await fs.rm(path.join(base, ".safehouse"));
+  await assert.rejects(routeCreation({ config: { ...request.config, provider: "custom-safehouse" } }, paseo), /launching or resuming.*Disable automatic Safehouse/);
+  await fs.writeFile(path.join(base, ".safehouse"), "");
   providers.copilot.env.BASE = "changed";
-  await assert.rejects(routeCreation(request, paseo), /Configure Safehouse again/);
+  await assert.rejects(routeCreation(request, paseo), /Refresh providers/);
   assert.equal(request.config.provider, "custom");
 });
 

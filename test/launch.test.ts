@@ -124,16 +124,18 @@ test("configured providers retain adapter, inherited configuration and literal c
   const { configuredProvider } = await import("../server/providers");
   const providers = {
     copilot: { command: [process.execPath, "base arg"], env: { BASE: "yes" }, disallowedTools: ["base-tool"], options: { setting: 1 } },
-    custom: { extends: "copilot", label: "Custom", env: { CUSTOM: "yes" }, disallowedTools: ["custom-tool"], models: [{ id: "model", label: "Model" }] },
+    custom: { extends: "copilot", label: "Custom", env: { CUSTOM: "yes", NODE_OPTIONS: "masked", PASEO_TEST: "masked", SAFEHOUSE_TEST: "masked", DYLD_TEST: "masked", LD_TEST: "masked", BASH_FUNC_TEST: "masked", ENV: "masked" }, disallowedTools: ["custom-tool"], models: [{ id: "model", label: "Model" }] },
     generic: { extends: "acp", label: "Generic", command: [process.execPath, "a'b", "$(touch forbidden)"] },
   };
   const before = JSON.stringify(providers);
   const custom = await configuredProvider("custom", providers);
   assert.equal(custom.base, "copilot");
+  assert.deepEqual(custom.envPass, ["BASE", "CUSTOM"]);
   assert.deepEqual(custom.command, [process.execPath, "base arg"]);
   assert.deepEqual(custom.config, providers.custom);
   assert.deepEqual((await configuredProvider("generic", providers)).command, providers.generic.command);
   assert.equal(JSON.stringify(providers), before);
+  await assert.rejects(configuredProvider("generic", { generic: { ...providers.generic, env: { "BAD,NAME": "unused" } } }), /invalid variable name/);
   for (const [id, config] of Object.entries({
     plugin: { command: [process.execPath] },
     child: { extends: "custom", command: [process.execPath] },
@@ -168,5 +170,36 @@ test("Paseo registry preserves derived copilot and generic ACP configuration", {
     assert.deepEqual(variant.runtimeSettings.disallowedTools, original.runtimeSettings.disallowedTools);
     assert.deepEqual(variant.runtimeSettings.command.argv, ["/bin/sh", "/protected/bootstrap"]);
     assert.deepEqual(registry[id].configuration.runtimeSettings.command.argv, resolved.command);
+  }
+});
+
+test("generic ACP native and sandboxed sessions accept an empty model catalog", { skip: !process.env.PASEO_RUNTIME_MODULES || process.platform !== "darwin" }, async (t) => {
+  const root = process.env.PASEO_RUNTIME_MODULES!;
+  const { buildProviderRegistry } = await import(pathToFileURL(path.join(root, "@getpaseo/server/dist/server/server/agent/provider-registry.js")).href);
+  const { default: pino } = await import(pathToFileURL(path.join(root, "pino/pino.js")).href);
+  const { findExecutable, guardProfile, prepareSnapshot, resolvePolicy, policyEnvironment } = await import("../server/policy");
+  const base = await fs.mkdtemp(path.join(os.homedir(), ".safehouse-acp-"));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const cwd = path.join(base, "workspace"), state = path.join(base, "state"), denied = path.join(base, "denied");
+  for (const dir of [cwd, state, denied]) await fs.mkdir(dir);
+  await fs.writeFile(path.join(denied, "canary"), "fixture");
+  const code = `const fs=require('node:fs'),path=require('node:path'),rl=require('node:readline').createInterface({input:process.stdin});rl.on('line',l=>{const q=JSON.parse(l);if(q.id===undefined)return;let result={};if(q.method==='initialize')result={protocolVersion:1,agentCapabilities:{},authMethods:[]};else if(q.method==='session/new'){result={sessionId:'fixture'};let access='allowed';try{fs.readFileSync(${JSON.stringify(path.join(denied, "canary"))})}catch(e){access=e.code}try{fs.writeFileSync(path.join(q.params.cwd,'observed.json'),JSON.stringify({sandbox:process.env.APP_SANDBOX_CONTAINER_ID??null,access}))}catch{}}process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:q.id,result})+'\\n')});`;
+  const binary = await findExecutable("safehouse"); assert.ok(binary);
+  const guard = path.join(state, "guard.sb"), launcher = path.join(state, "launch.sh");
+  await fs.writeFile(guard, guardProfile([state], [], []));
+  await fs.writeFile(launcher, renderBootstrap({ root: state, binary, guard, host: "acp", command: [process.execPath, "-e", code] }));
+  const registry = buildProviderRegistry(pino({ level: "silent" }), { providerOverrides: {
+    ordinary: { extends: "acp", label: "Ordinary", command: [process.execPath, "-e", code] },
+    wrapped: { extends: "acp", label: "Wrapped", command: ["/bin/sh", launcher] },
+  } });
+  const snapshot = await prepareSnapshot(state, await resolvePolicy("", cwd, []));
+  for (const id of ["ordinary", "wrapped"]) {
+    const client = registry[id].createClient(pino({ level: "silent" }));
+    const session = await client.createSession({ provider: id, cwd }, { env: id === "wrapped" ? policyEnvironment(process.env, snapshot) : {} });
+    try {
+      const observed = JSON.parse(await fs.readFile(path.join(cwd, "observed.json"), "utf8"));
+      assert.deepEqual(observed, { sandbox: id === "wrapped" ? "agent-safehouse" : null, access: id === "wrapped" ? "EPERM" : "allowed" });
+      assert.equal(await session.getCurrentMode(), null);
+    } finally { await session.close(); await client.shutdown?.(); }
   }
 });

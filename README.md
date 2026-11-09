@@ -6,21 +6,24 @@ The plugin uses a workspace’s existing `.safehouse` policy automatically unles
 Use Paseo’s normal provider picker to start sandboxed agents. Review access when you want to inspect or edit the policy.
 The workspace policy applies across supported providers while Paseo manages conversations, model selection, and resume.
 
-**Status: development prototype. Release validation is incomplete.**
+**Status: local human-test candidate. Release validation and staff-review corrections remain open.**
+
+The candidate runs on an isolated daemon. The main daemon retains its existing installation.
+See [implementation status](docs/implementation.md) for the tested revision and remaining work.
 
 ## Workflow
 
 1. Open a workspace that contains `.safehouse`.
-2. The workspace header shows **Safehouse auto on** when providers are configured and the policy resolves successfully.
+2. The candidate header shows **Safehouse auto on** when automatic routing is enabled and the workspace is ready.
 3. Select a provider and model, then start an agent.
 4. To inspect or change access, open **Safehouse**, choose **Review access**, and save edits with **Save policy**.
 5. To apply policy changes to an existing agent, reload that agent.
 
-The header menu offers **Enable automatic Safehouse**, **Disable automatic Safehouse**, and **Review policy**.
-The choice persists across clients for this workspace. The header shows **Safehouse auto off** after you disable automatic routing.
-Explicit Safehouse providers remain sandboxed. Existing agents keep their provider and conversation.
-Without a policy or saved choice, new ordinary agents retain native behavior.
-Explicit enable requires a valid `.safehouse` policy. The panel can create one from directory grants and optional capabilities.
+The panel can create `.safehouse` from directory grants and optional capabilities.
+The candidate header menu enables or disables automatic routing for new agents.
+The choice applies across clients until changed. It does not select the behavior of one draft.
+Explicit Safehouse providers remain sandboxed when automatic routing is off. Existing agents keep their providers.
+If automatic routing is enabled without a policy, new managed launches fail with a policy error.
 Per-draft controls remain a [future API opportunity](docs/design.md#future-upstream-api-opportunities).
 
 Safehouse restricts the agent process and its children. The Paseo daemon remains outside that sandbox.
@@ -34,7 +37,7 @@ The plugin selects Codex **Full Access** automatically for Safehouse launches.
 This disables Codex’s inner sandbox and approval prompts.
 Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
 Setup also wraps explicit command arrays for supported built-in adapters, their direct derivatives, and generic custom ACP providers.
-Arguments retain their literal values. Unsupported configurations fail with an instruction to disable automatic routing.
+Arguments retain their literal values. Explicit provider environment reaches both sandboxed sessions and catalog discovery, except blocked launch-control variables. Unsupported configurations fail with an instruction to disable automatic routing.
 The failed launch never retries outside Safehouse. A later ordinary launch requires your explicit workspace choice.
 
 Model discovery runs in a separate Safehouse process with no workspace grants.
@@ -50,7 +53,7 @@ The development agent runs outside Safehouse and uses an isolated daemon for san
 
 Beta acceptance targets Paseo 0.15.3 and Safehouse 0.12.0 on the daemon host.
 Earlier provider evidence used Paseo 0.15.2; full 0.15.3 acceptance remains open.
-Development uses the SDK 0.14 lifecycle aliases that Paseo 0.15.2 supports.
+Development uses SDK 0.14 lifecycle aliases. The isolated 0.15.3 runtime checks cover this integration.
 
 ```sh
 npm ci
@@ -59,7 +62,8 @@ npm test
 paseo plugin install "$PWD" --home /path/to/development-daemon-home
 ```
 
-Use a separate daemon for development. In the **Safehouse** panel, configure providers before launching sandboxed agents.
+Use a separate daemon for development. In the **Safehouse** panel, select **Refresh providers** before launching sandboxed agents.
+The action remains available after setup to add configured providers or refresh their commands and environment.
 The command center entry is **Configure or review Safehouse**.
 The macOS test runs real sandbox probes against temporary fixtures.
 

@@ -11,6 +11,7 @@ The policy file and its custom profiles are trusted inputs for each new process.
 Invalid directives, unavailable paths, and unsupported capabilities fail rather than fall back to an ordinary launch.
 
 The panel offers **Review access** to inspect or edit directory grants, capabilities, and custom profiles.
+**Refresh providers** remains available after setup. The panel lists unavailable providers and their reasons.
 **Save policy** writes the source file after preview and a check for concurrent edits.
 Existing policy bytes remain unchanged unless the user edits them.
 If `.safehouse` is absent and automatic routing is not explicitly enabled, new ordinary-provider launches keep their native behavior.
@@ -87,6 +88,9 @@ The plugin adds variants such as `pi-safehouse`, with `extends: "pi"` and a comm
 
 The generated bootstrap quotes each configured command element literally, then appends Paseo’s protocol arguments.
 Session environment selects the protected policy snapshot.
+Setup collects valid environment names explicitly configured on the source and its base provider.
+Both bootstrap branches pass these names through Safehouse. The bootstrap contains names, not environment values.
+Policy, daemon, loader, Node and shell-control variables remain blocked. Unlisted daemon variables retain Safehouse’s default sanitization.
 Ordinary provider configuration remains intact. Installation rejects collisions with unrelated provider entries.
 Explicit command arrays support built-in factories and direct derivatives of those factories.
 A derived variant extends the same built-in and retains source overrides, including native environment and tool-restriction inheritance.
@@ -114,9 +118,17 @@ Calls share a queue for each daemon home within one process.
 The public API has no compare-and-swap operation, so external writers can race with setup.
 Exact readback detects resulting conflicts, but cannot exclude another daemon or an external writer.
 
+Refresh retains an unavailable source's owned variant and immutable files, but marks that variant inactive.
+Healthy providers and policy controls remain usable. New launches and reopen preparation reject inactive variants until their source returns.
+Running processes retain their existing files and provider. Refresh does not reassign them.
+If the public variant is also absent, refresh drops only its local ownership metadata.
+An interrupted pending plan still rejects source conflicts instead of discarding its evidence.
+
 Paseo recursively merges provider objects and retains omitted nested fields.
 A refresh that requires nested-field deletion fails before any file or configuration write.
 The previous installation remains intact.
+Refresh retains previous empty masks for reserved environment names, even if those names disappear from the daemon environment.
+This does not retain deleted user environment fields or nonempty values.
 Atomic file replacement covers process interruption, but does not guarantee recovery from power loss or filesystem corruption.
 
 ### Lifecycle hooks
@@ -132,9 +144,10 @@ The beta targets Paseo 0.15.3 and Safehouse 0.12.0. Earlier evidence used Paseo 
 
 The opening hook cannot change executable arguments. Provider configuration supplies that execution mechanism.
 Creation hooks exclude Paseo’s internal agents. The beta must attempt the selected harness inside Safehouse, including harnesses outside the initial three adapters.
-Configured command support is bounded by adapter preservation. It does not establish conversation compatibility for every harness.
+The local candidate wraps configured command arrays when the public adapter API preserves their semantics.
+Providers without a usable exposed command fail with an explicit recovery path.
 A failed sandboxed launch must report the failure without an unsandboxed retry.
-The user can explicitly disable Safehouse for subsequent launches through the workspace menu.
+The user can explicitly disable Safehouse for subsequent launches through the workspace header menu.
 
 ### Policy snapshots
 
@@ -152,7 +165,9 @@ The opening hook resolves the source again before preparing the snapshot. Later 
 
 The ordinary provider supplies the picker’s model catalog before workspace routing occurs.
 This discovery retains Paseo’s host-side behavior and is outside the harness sandbox guarantee.
-The creation hook must preserve a concrete model before selecting the variant.
+The creation hook preserves a selected or default model before selecting the variant.
+A generic ACP harness can start without a model when its native catalog is empty.
+Other empty-catalog cases report the selected provider and explicit ordinary-launch recovery.
 
 Variant discovery bypasses the opening hook and receives the provider’s default environment.
 The bootstrap changes its directory to `/` and starts Safehouse with an explicitly empty workdir grant.
@@ -199,8 +214,9 @@ Detached descendants can retain the previous sandbox policy.
 
 Safehouse restricts the harness process and its children. The Paseo daemon remains outside that sandbox.
 Daemon-side tools, MCP services, and external services have separate authority.
-The implementation disables agent-side Paseo tools and rejects explicit or hook-local MCP contributions.
-Those checks do not cover MCP contributions from other plugins.
+Explicit creation MCP maps and hook-local MCP maps and tools pass through unchanged.
+Wrapped providers set `paseoTools.enabled: false` to disable the separate agent-side Paseo control bridge.
+The sandbox protects daemon state and control ports. The daemon and plugin host remain trusted.
 Additional MCP services can provide access outside the process sandbox. Users must consider each service's authority.
 Other enabled plugins are not prohibited.
 Harness-native services and enabled credentials retain their own authority.

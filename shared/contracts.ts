@@ -15,6 +15,7 @@ export const statusRpc = defineRpc({
     digest: z.string().nullable(),
     policyValid: z.boolean(),
     error: z.string().nullable(),
+    unavailable: z.record(z.string(), z.string()),
     features: z.array(z.string()),
     agents: z.array(
       z.object({

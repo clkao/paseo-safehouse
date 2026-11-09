@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { setup } from "../server/service";
+import { setup, status, prepareOpening } from "../server/service";
 import { run } from "../server/policy";
 
 // Paseo 0.15.3 recursively merges objects, replacing arrays and scalar values.
@@ -30,7 +30,7 @@ async function fixture(t: any) {
     await fs.rm(dir, { recursive: true, force: true });
   });
   const configFile = path.join(dir, "providers.json");
-  const initial = { providers: { pi: { env: { USER_OPTION: "kept" }, models: [{ id: "native", label: "Native" }] }, peer: { label: "Peer", extends: "pi", command: ["peer"] } }, plugins: { peer: { enabled: true } } };
+  const initial = { providers: { pi: { paseoTools: { enabled: true }, env: { USER_OPTION: "kept" }, models: [{ id: "native", label: "Native" }] }, peer: { label: "Peer", extends: "pi", command: ["peer"] } }, plugins: { peer: { enabled: true } } };
   await fs.writeFile(configFile, JSON.stringify(initial));
   let patches = 0;
   const get = async () => JSON.parse(await fs.readFile(configFile, "utf8"));
@@ -48,7 +48,7 @@ test("setup recovers an applied patch with a lost response in a fresh process", 
   await assert.rejects(setup(f.host), /lost setup response/);
   const retry = path.join(f.dir, "retry.mts");
   await fs.writeFile(retry, `import * as fs from 'node:fs/promises';
-import { setup } from ${JSON.stringify(path.join(process.cwd(), "server/service.ts"))};
+import { setup, status, prepareOpening } from ${JSON.stringify(path.join(process.cwd(), "server/service.ts"))};
 const file = ${JSON.stringify(f.configFile)};
 const merge = ${merge.toString()};
 await setup({config:{get:async()=>({config:JSON.parse(await fs.readFile(file,'utf8'))}),patch:async p=>fs.writeFile(file,JSON.stringify(merge(JSON.parse(await fs.readFile(file,'utf8')),p)))}});
@@ -57,6 +57,8 @@ await setup({config:{get:async()=>({config:JSON.parse(await fs.readFile(file,'ut
   const saved = JSON.parse(await fs.readFile(path.join(f.root, "installation.json"), "utf8"));
   const current = await f.get();
   assert.deepEqual(current.providers["pi-safehouse"], saved.entries["pi-safehouse"]);
+  assert.equal(current.providers["pi-safehouse"].paseoTools.enabled, false);
+  assert.equal(current.providers.pi.paseoTools.enabled, true);
   assert.deepEqual(current.providers.pi, f.initial.providers.pi);
   assert.deepEqual(current.providers.peer, f.initial.providers.peer);
   assert.deepEqual(current.plugins, f.initial.plugins);
@@ -234,4 +236,72 @@ test("invalid committed state and pending persistence failure prevent publicatio
   await fs.rmdir(pending);
   await setup(f.host);
   assert.equal(f.patches(), 1);
+});
+
+for (const change of ["removed", "unwrappable"]) {
+  test(`refresh retires ${change} sources without blocking healthy providers`, { skip: process.platform !== "darwin" }, async t => {
+    const f = await fixture(t), config = await f.get();
+    const custom = { label: "Custom", extends: "copilot", command: [path.join(f.bin, "pi")] };
+    config.providers.custom = custom;
+    await fs.writeFile(f.configFile, JSON.stringify(config));
+    await fs.writeFile(path.join(f.dir, ".safehouse"), "");
+    Object.assign(f.host, { workspaces: { ref: () => ({ refresh: async () => ({ workspaceDirectory: f.dir }) }) }, agents: { list: async () => ({ entries: [] }) } });
+    await setup(f.host);
+    const installation = path.join(f.root, "installation.json");
+    const old = JSON.parse(await fs.readFile(installation, "utf8"));
+    const files = [old.guard, old.entries["custom-safehouse"].command[1]];
+    const bytes = await Promise.all(files.map(file => fs.readFile(file, "utf8")));
+    const changed = await f.get();
+    if (change === "removed") delete changed.providers.custom;
+    else changed.providers.custom.command = [path.join(f.bin, "missing")];
+    await fs.writeFile(f.configFile, JSON.stringify(changed));
+    await setup(f.host); await setup(f.host);
+    const retired = JSON.parse(await fs.readFile(installation, "utf8"));
+    assert.deepEqual(retired.entries["custom-safehouse"], old.entries["custom-safehouse"]);
+    assert.ok(retired.unavailable.custom);
+    assert.deepEqual(retired.sources["custom-safehouse"].source, changed.providers.custom ?? null);
+    assert.deepEqual(await Promise.all(files.map(file => fs.readFile(file, "utf8"))), bytes);
+    assert.deepEqual((await f.get()).providers.pi, changed.providers.pi);
+    assert.deepEqual((await f.get()).providers.peer, changed.providers.peer);
+    assert.equal((await status(f.host, "workspace")).configured, true);
+    const opening = (provider: string) => ({ provider, cwd: f.dir, agentId: "resume", reason: "resume", workspaceId: null, purpose: "interactive", title: null, labels: {}, env: {}, tools: [], mcpServers: {} }) as Parameters<typeof prepareOpening>[0];
+    await assert.rejects(prepareOpening(opening("custom-safehouse"), f.host), /unavailable/);
+    assert.ok((await prepareOpening(opening("pi-safehouse"), f.host)).env.SAFEHOUSE_WORKDIR);
+    await assert.rejects(fs.access(path.join(f.root, "setup-pending.json")), { code: "ENOENT" });
+    const coherent = await f.get(), edited = structuredClone(coherent);
+    edited.providers["custom-safehouse"].label = "Foreign edit";
+    await fs.writeFile(f.configFile, JSON.stringify(edited));
+    const count = f.patches(); await assert.rejects(setup(f.host), /another configuration/);
+    assert.equal(f.patches(), count);
+    await fs.writeFile(f.configFile, JSON.stringify(coherent));
+    const restored = await f.get(); restored.providers.custom = custom;
+    await fs.writeFile(f.configFile, JSON.stringify(restored)); await setup(f.host);
+    assert.equal(JSON.parse(await fs.readFile(installation, "utf8")).unavailable.custom, undefined);
+    assert.ok((await prepareOpening(opening("custom-safehouse"), f.host)).env.SAFEHOUSE_WORKDIR);
+    const removed = await f.get(); delete removed.providers.custom; delete removed.providers["custom-safehouse"];
+    await fs.writeFile(f.configFile, JSON.stringify(removed)); await setup(f.host);
+    const dropped = JSON.parse(await fs.readFile(installation, "utf8"));
+    assert.equal(dropped.entries["custom-safehouse"], undefined);
+    assert.equal(dropped.sources["custom-safehouse"], undefined);
+    assert.equal((await f.get()).providers["custom-safehouse"], undefined);
+    assert.deepEqual(await Promise.all(files.map(file => fs.readFile(file, "utf8"))), bytes);
+  });
+}
+
+test("refresh retains only stale reserved empty masks and rejects real env deletion", { skip: process.platform !== "darwin" }, async t => {
+  const f = await fixture(t), name = "PASEO_TEST_EPHEMERAL", original = process.env[name];
+  t.after(() => { if (original === undefined) delete process.env[name]; else process.env[name] = original; });
+  process.env[name] = "fixture";
+  await setup(f.host); delete process.env[name];
+  const changed = await f.get(); changed.providers.pi.label = "Updated Pi";
+  await fs.writeFile(f.configFile, JSON.stringify(changed)); await setup(f.host);
+  assert.equal((await f.get()).providers["pi-safehouse"].env[name], "");
+  assert.equal((await f.get()).providers["pi-safehouse"].label, "Pi · Safehouse");
+  const withEmpty = await f.get(); withEmpty.providers.pi.env.USER_EMPTY = "";
+  await fs.writeFile(f.configFile, JSON.stringify(withEmpty)); await setup(f.host);
+  const removed = await f.get(); delete removed.providers.pi.env.USER_EMPTY;
+  await fs.writeFile(f.configFile, JSON.stringify(removed));
+  const before = f.patches(); await assert.rejects(setup(f.host), /nested field removal/);
+  assert.equal(f.patches(), before);
+  await assert.rejects(fs.access(path.join(f.root, "setup-pending.json")), { code: "ENOENT" });
 });

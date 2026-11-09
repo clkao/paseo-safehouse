@@ -1,5 +1,5 @@
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
-import { findExecutable } from "./policy";
+import { findExecutable, providerEnvironmentNames } from "./policy";
 
 type Paseo = PluginHandlerContext["paseo"];
 export type Providers = NonNullable<Awaited<ReturnType<Paseo["config"]["get"]>>["config"]["providers"]>;
@@ -11,9 +11,9 @@ export type ProviderConfig = Providers[string] & {
 // factories preserve adapter behavior when extended under another id.
 const factories = ["pi", "claude", "codex", "copilot", "cursor", "opencode", "omp"];
 const specialAcp = ["cursor", "kimi", "kiro", "traecli", "hub-e2e"];
-export const launchError = (id: string, reason: string) => new Error(
+export const launchError = (id: string, reason: string) => Object.assign(new Error(
   `Safehouse provider ${id}: ${reason}. Disable automatic Safehouse in this workspace to launch the ordinary provider.`,
-);
+), { name: "SafehouseLaunchError" });
 export async function configuredProvider(id: string, providers: Providers) {
   const config = (providers[id] ?? {}) as ProviderConfig;
   const base = factories.includes(id) ? id : config.extends;
@@ -29,5 +29,6 @@ export async function configuredProvider(id: string, providers: Providers) {
   if (!executable) throw launchError(id, `executable ${command[0]} is unavailable`);
   // Retain source overrides and native base inheritance. Copying merged tool
   // restrictions here would apply the base's restrictions twice in the registry.
-  return { base, config, command: [executable, ...command.slice(1)] };
+  const envPass = providerEnvironmentNames([...Object.keys(providers[base]?.env ?? {}), ...Object.keys(config.env ?? {})]);
+  return { base, config, envPass, command: [executable, ...command.slice(1)] };
 }

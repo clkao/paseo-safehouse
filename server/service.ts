@@ -13,6 +13,7 @@ import { configuredProvider, launchError, type ProviderConfig } from "./provider
 import {
   atomicJson,
   capabilities,
+  blockedEnvironmentName,
   canonicalDirectory,
   findExecutable,
   guardProfile,
@@ -150,7 +151,7 @@ async function setupLocked(
   const sources: Record<string, Source> = { ...old?.sources };
   const unavailable: Record<string, string> = {};
   const bootstraps: { file: string; text: string }[] = [];
-  const wrappers: { host: string; base: string; config: ProviderConfig; command: string[] }[] = [];
+  const wrappers: { host: string; base: string; config: ProviderConfig; command: string[]; envPass: string[] }[] = [];
   const protectedPaths = [
     details.source,
     binary,
@@ -158,12 +159,12 @@ async function setupLocked(
     process.execPath,
     await fs.realpath(process.execPath),
   ];
-  for (const host of new Set([...HOSTS, ...Object.keys(current)])) {
+  for (const host of new Set([...HOSTS, ...Object.keys(current), ...Object.values(old?.sources ?? {}).map(source => source.provider)])) {
     if (old?.entries[host]) continue;
     let resolved;
     try { resolved = await configuredProvider(host, current); }
-    catch (e) { unavailable[host] = String(e); continue; }
-    const { base, config, command } = resolved;
+    catch (e) { unavailable[host] = e instanceof Error ? e.message : String(e); continue; }
+    const { base, config, command, envPass } = resolved;
     const executable = command[0];
     const id = variant(host);
     if (current[id] && !isDeepStrictEqual(current[id], old?.entries[id]))
@@ -171,10 +172,19 @@ async function setupLocked(
         `Provider ${id} belongs to another configuration. It was not changed.`,
       );
     protectedPaths.push(executable, await fs.realpath(executable));
-    wrappers.push({ host, base, config, command });
+    wrappers.push({ host, base, config, command, envPass });
     sources[id] = { provider: host, base, source: current[host] ?? null, baseSource: current[base] ?? null };
   }
-  if (!wrappers.length && !Object.keys(entries).length)
+  for (const [id, source] of Object.entries(sources)) {
+    if (!unavailable[source.provider]) continue;
+    if (current[id] === undefined) {
+      delete entries[id];
+      delete sources[id];
+    } else {
+      sources[id] = { ...source, source: current[source.provider] ?? null, baseSource: current[source.base] ?? null };
+    }
+  }
+  if (!old && !wrappers.length && !Object.keys(entries).length)
     throw new Error(
       "No configured harness can be wrapped. Check command arrays and executable availability.",
     );
@@ -185,13 +195,15 @@ async function setupLocked(
   const mainPort = Number(mainPid?.listen?.split(":").at(-1));
   const guardText = guardProfile([root, details.home, mainHome], protectedPaths, [details.port, ...(mainPort ? [mainPort] : [])]);
   const guard = path.join(root, `guard-${hash(guardText).slice(0, 16)}.sb`);
-  for (const { host, base, config, command } of wrappers) {
-    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions });
+  for (const { host, base, config, command, envPass } of wrappers) {
+    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions, envPass });
     const file = path.join(root, "launchers", `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`);
     bootstraps.push({ file, text });
+    const retainedMasks = Object.fromEntries(Object.entries(old?.entries[variant(host)]?.env ?? {})
+      .filter(([name, value]) => value === "" && blockedEnvironmentName(name)));
     entries[variant(host)] = { ...config, extends: base,
       label: `${host === "pi" ? "Pi" : host[0].toUpperCase() + host.slice(1)} · Safehouse`,
-      command: ["/bin/sh", file], env: policyEnvironment(config.env ?? {}, path.join(root, "catalog")),
+      command: ["/bin/sh", file], env: { ...retainedMasks, ...policyEnvironment(config.env ?? {}, path.join(root, "catalog")) },
       paseoTools: { ...config.paseoTools, enabled: false } };
   }
   for (const id of Object.keys(entries))
@@ -221,9 +233,11 @@ async function ready(paseo: Paseo, provider?: string) {
     const current = (await paseo.config.get()).config.providers ?? {};
     const entry = current[provider];
     const source = saved.sources?.[provider];
+    if (source && saved.unavailable?.[source.provider])
+      throw launchError(source.provider, "source is unavailable; restore it and use Refresh providers in the Safehouse panel");
     if (source && (!isDeepStrictEqual(current[source.provider] ?? null, source.source) ||
         !isDeepStrictEqual(current[source.base] ?? null, source.baseSource)))
-      throw launchError(source.provider, "configuration changed; Configure Safehouse again");
+      throw launchError(source.provider, "configuration changed; use Refresh providers in the Safehouse panel");
     if (
       !saved.entries[provider] ||
       !isDeepStrictEqual(entry, saved.entries[provider])
@@ -284,28 +298,30 @@ export async function routeCreation(
   const selected = installed?.entries[request.config.provider];
   const choice = await routingChoice(cwd);
   if (!selected && choice === false) return request;
-  const raw = await readSource(cwd);
+  const recover = <T>(operation: Promise<T>) => operation.catch((error: unknown) => {
+    if (error instanceof Error && error.name === "SafehouseLaunchError") throw error;
+    throw launchError(request.config.provider, error instanceof Error ? error.message : String(error));
+  });
+  const raw = await recover(readSource(cwd));
   if (!selected && choice !== true && raw === null) return request;
   macOnly();
   const provider = selected ? request.config.provider : variant(request.config.provider);
   const host = installed?.sources?.[provider]?.base ?? (selected ? native(provider) : request.config.provider);
-  if (!installed?.entries[provider] || !host)
-    throw launchError(request.config.provider, installed?.unavailable?.[request.config.provider] ?? "Configure Safehouse again to wrap this provider");
-  const saved = await ready(paseo, provider);
-  await loadPolicy(cwd, saved.features);
-  if (Object.keys(request.config.mcpServers ?? {}).length)
-    throw new Error(
-      "Safehouse requires review of external MCP bridges before launch.",
-    );
+  if (!installed?.entries[provider] || !host) {
+    await recover(configuredProvider(request.config.provider, (await paseo.config.get()).config.providers ?? {}));
+    throw launchError(request.config.provider, "Refresh providers in the Safehouse panel to wrap this provider");
+  }
+  const saved = await recover(ready(paseo, provider));
+  await recover(loadPolicy(cwd, saved.features));
   let model = request.config.model;
   if (!model) {
     const original = installed.sources?.[provider]?.provider ?? host;
-    const catalog = await paseo.providers.listModels(original, { cwd });
+    const catalog = await recover(paseo.providers.listModels(original, { cwd }));
     const models = catalog.models ?? [];
     model = (models.find((m) => m.isDefault) ?? models[0])?.id;
-    if (!model)
-      throw new Error(
-        `Select a ${host} model before launching with Safehouse.`,
+    if (!model && host !== "acp")
+      throw launchError(request.config.provider,
+        `No model is available for ${request.config.provider}; select or configure a model before launching`,
       );
   }
   return {
@@ -336,10 +352,6 @@ export async function prepareOpening(
   const saved = await ready(paseo, request.provider);
   const cwd = await canonicalDirectory(request.cwd);
   const policy = await loadPolicy(cwd, saved.features);
-  if (request.tools.length || Object.keys(request.mcpServers).length)
-    throw new Error(
-      "Safehouse cannot authorize daemon-side plugin tools or MCP bridges.",
-    );
   const snapshot = await prepareSnapshot(stateRoot(), policy);
   await atomicJson(receiptPath(request.agentId), {
     agentId: request.agentId,
@@ -374,6 +386,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     const providers = (await paseo.config.get()).config.providers ?? {};
     configured = Object.entries(saved.entries).every(([id, entry]) => {
       const source = saved.sources?.[id];
+      if (source && saved.unavailable?.[source.provider]) return true;
       return isDeepStrictEqual(providers[id], entry) && (!source || (
         isDeepStrictEqual(providers[source.provider] ?? null, source.source) &&
         isDeepStrictEqual(providers[source.base] ?? null, source.baseSource)));
@@ -424,6 +437,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     digest: policy?.digest ?? null,
     policyValid,
     error: routingError ?? error,
+    unavailable: saved?.unavailable ?? {},
     features: saved?.features ?? [],
     agents,
   };
