@@ -38,7 +38,8 @@ npm test
 paseo plugin install "$PWD" --home /path/to/development-daemon-home
 ```
 
-Use a separate daemon for development. In the Safehouse panel, configure providers before reviewing a workspace policy.
+Use a separate daemon for development. In the **Safehouse Direct** panel, configure providers before reviewing a workspace policy.
+The command center entry is **Configure or review Safehouse Direct**.
 The macOS test runs real sandbox probes against temporary fixtures.
 
 - [Design](docs/design.md): architecture, policy approval, lifecycle integration, and security boundary.

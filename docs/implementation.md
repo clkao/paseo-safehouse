@@ -17,6 +17,7 @@ The existing ASR session must remain running. The main daemon configuration must
 - [x] Verify automatic Codex Full Access selection with regression tests and a live sandbox probe.
 - [ ] Complete the desktop launch-screen and policy-panel acceptance journey.
 - [ ] Validate Claude and Codex independently.
+- [ ] Draft the workspace capability broker design and identify the minimum Subspace integration.
 
 ## Evidence and constraints
 
@@ -56,6 +57,7 @@ The automatic-mode probe used agent `3417306f-98b4-4054-ac53-509a25ab9a43` in AS
 The repeatable probe is `scripts/validate-codex-mode.mjs`. It checks actual shell output and preserves the source policy hash.
 
 The desktop interface is implemented but not visually accepted.
+The panel and command center identify this plugin as **Safehouse Direct** to distinguish it from the older Safehouse plugin.
 Agent indicators report policy preparation, not verified sandbox activity.
 Snapshot cleanup, install removal, interruption tests, and remaining provider acceptance are still open.
 
