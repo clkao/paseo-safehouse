@@ -253,6 +253,7 @@ test(
         cwd: workspaces[0],
         provider: "codex",
         modeId: "auto",
+        providerOptions: { sandbox_mode: "workspace-write", approval_policy: "on-request" },
         model: "fixture/model",
       },
     };

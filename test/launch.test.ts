@@ -160,6 +160,10 @@ test("Paseo registry preserves derived copilot and generic ACP configuration", {
     const wrapped = { ...resolved.config, extends: resolved.base, label: "Wrapped", command: ["/bin/sh", "/protected/bootstrap"] };
     const registry = buildProviderRegistry(pino({ level: "silent" }), { providerOverrides: { ...providers, wrapped } });
     const original = registry[id].configuration, variant = registry.wrapped.configuration;
+    assert.deepEqual(variant.providerOptions, original.providerOptions);
+    assert.deepEqual(variant.profileModels, original.profileModels);
+    assert.deepEqual(variant.definition.modes, original.definition.modes);
+    assert.equal(variant.definition.defaultModeId, original.definition.defaultModeId);
     assert.deepEqual(variant.runtimeSettings.env, original.runtimeSettings.env);
     assert.deepEqual(variant.runtimeSettings.disallowedTools, original.runtimeSettings.disallowedTools);
     assert.deepEqual(variant.runtimeSettings.command.argv, ["/bin/sh", "/protected/bootstrap"]);
