@@ -1,37 +1,44 @@
 # Validation plan
 
 This plan defines the evidence required to establish the [design](design.md).
-The implementation gates and provider acceptance journeys are pending.
+Results and outstanding work belong in [implementation status](implementation.md).
 
-## Implementation gates
-
-The command-array mechanism supports direct Safehouse invocation. The complete workspace experience requires the following evidence:
+## Release gates
 
 | Property | Required evidence |
 | --- | --- |
-| Complete policy transport | Directory grants, capability enables, and custom profiles reach Safehouse while the harness retains its workspace cwd. |
-| Approval bound to launch | Changes between review and launch cannot grant unreviewed access. |
-| Workspace isolation | Concurrent agents in enabled and unrelated workspaces receive the intended policies. |
-| Provider discovery | Workspace extensions and model catalogs load with approved dependencies before an agent identity exists. |
-| Failure handling | Missing approval, changed policy, and plugin failure cannot grant unreviewed broader access. |
-| Process supervision | Cancellation, child cleanup, exit reporting, and native resume retain their expected behavior. |
+| Automatic routing | Ordinary provider selection uses its Safehouse variant only in a managed workspace. |
+| Policy creation | Configure Safehouse collects grants and capabilities, then creates and approves `.safehouse`. |
+| Approval | New, changed, invalid, or removed policies block managed launches before a harness starts. |
+| Complete policy transport | Grants, capabilities, and custom profiles reach Safehouse while the harness retains its workspace directory. |
+| Snapshot integrity | Changes between review and launch cannot grant unreviewed access. The harness cannot edit enforcement state. |
+| Workspace isolation | Concurrent agents retain separate policies. Unrelated workspaces and existing sessions retain their behavior. |
+| Discovery | Ordinary-picker selection survives variant discovery failures. Discovery never borrows another workspace’s grants. |
+| Failure handling | Missing preparation, provider collisions, and unavailable Safehouse produce errors without a host fallback. |
+| Status | Header states match readiness. Agent indicators distinguish policy preparation from runtime evidence. |
+| Process supervision | Cancellation, child cleanup, exit reporting, and native resume retain expected behavior. |
+| Provider modes | Claude retains tool approvals. Codex requires an explicit Full Access selection and remains restricted by Safehouse. |
+| Platform | Non-macOS hosts cannot configure or launch Safehouse variants. |
 
-These are release gates. Unresolved properties remain documented limitations of the design.
+The plugin’s absence prevents automatic routing enforcement. This is an explicit boundary, not a passing failure-handling result.
+Unresolved gates prevent a release claim.
 
-## Provider acceptance journey
+## Provider acceptance
 
-The first reference journey uses Pi with DeepSeek in an ASR workspace.
-A separate daemon can isolate provider configuration experiments from active conversations.
+The first reference journey uses Pi with DeepSeek in ASR.
+A separate daemon isolates configuration experiments from active conversations.
+The existing ASR agent remains running throughout the journey.
 
 Acceptance requires:
 
-- A process trace showing Paseo starting Safehouse directly with Pi as the inner executable.
-- Successful chat and a real tool call in the workspace.
-- Successful workspace read/write and denied access to a harmless ungranted sibling fixture.
-- Denied access to protected daemon endpoints and approval records.
-- Policy bytes preserved unless the user changes access.
-- Native resume that retains a conversation marker and repeats the sandbox checks.
-- An independently running conversation that remains available throughout the test.
+1. An ordinary provider selection that creates a second agent through the configured Safehouse variant.
+2. A process trace that shows Paseo starting Safehouse directly with the native harness.
+3. Successful chat and a real tool call in the workspace.
+4. Successful workspace reads and writes, with denied access to an ungranted sibling fixture.
+5. Denied access to daemon endpoints, approval records, and policy snapshots.
+6. Source policy bytes preserved unless the user edits access.
+7. A native resume that retains a conversation marker and repeats the sandbox checks.
+8. An independent conversation that remains available throughout the test.
 
-Claude and Codex require the same behavioral evidence through their own discovery and launch paths.
+Claude and Codex require the same evidence through their own launch paths.
 Chat success alone does not establish sandbox enforcement.
