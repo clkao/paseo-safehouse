@@ -297,7 +297,16 @@ export async function routeCreation(
       provider,
       model,
       // Safehouse supplies the sandbox; Codex cannot nest macOS Seatbelt.
-      ...(host === "codex" ? { modeId: "full-access" } : {}),
+      ...(host === "codex"
+        ? {
+            modeId: "full-access",
+            providerOptions: {
+              ...request.config.providerOptions,
+              sandbox_mode: "danger-full-access",
+              approval_policy: "never",
+            },
+          }
+        : {}),
     },
   };
 }

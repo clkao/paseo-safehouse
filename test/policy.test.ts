@@ -98,8 +98,11 @@ test("unmanaged workspaces retain ordinary provider selection without daemon cal
   ) as Parameters<typeof routeCreation>[1];
   for (const provider of ["pi", "claude", "codex"]) {
     for (const modeId of [undefined, "auto", "read-only", "full-access"]) {
-      const request = { config: { provider, cwd, modeId } };
+      const providerOptions = { sandbox_mode: "workspace-write", approval_policy: "on-request" };
+      const request = { config: { provider, cwd, modeId, providerOptions } };
       assert.equal(await routeCreation(request, forbidden), request);
+      assert.equal(request.config.providerOptions, providerOptions);
+      assert.deepEqual(providerOptions, { sandbox_mode: "workspace-write", approval_policy: "on-request" });
     }
   }
   assert.equal(variant("pi"), "pi-safehouse");
@@ -204,35 +207,42 @@ test(
     assert.equal(routed.config.provider, variant("pi"));
     assert.equal(routed.config.model, "fixture/model");
     assert.deepEqual(requestedCatalogs, ["pi"]);
+    const options = [
+      undefined,
+      { sandbox_mode: "read-only" },
+      { approval_policy: "on-request" },
+      ...["read-only", "workspace-write", "danger-full-access"].flatMap((sandbox_mode) =>
+        ["on-request", "untrusted", "on-failure", "never", { reject: { sandbox_approval: true, rules: false, mcp_elicitations: true } }]
+          .map((approval_policy) => ({ sandbox_mode, approval_policy,
+            features: { multi_agent: true }, model_reasoning_effort: "low" }))),
+    ];
     for (const provider of ["codex", variant("codex")]) {
       for (const modeId of [undefined, "auto", "read-only", "full-access"]) {
-        const request: Parameters<typeof routeCreation>[0] = {
-          config: {
-            cwd: workspaces[0],
-            provider,
-            model: "fixture/model",
-            modeId,
-          },
-        };
-        const codex = await routeCreation(request, paseo);
-        assert.equal(codex.config.modeId, "full-access");
-        assert.equal(codex.config.provider, variant("codex"));
-        assert.equal(request.config.modeId, modeId);
+        for (const providerOptions of options) {
+          const request: Parameters<typeof routeCreation>[0] = {
+            config: { cwd: workspaces[0], provider, model: "fixture/model", modeId, providerOptions },
+          };
+          const original = structuredClone(request);
+          const codex = await routeCreation(request, paseo);
+          assert.equal(codex.config.modeId, "full-access");
+          assert.equal(codex.config.provider, variant("codex"));
+          assert.equal(codex.config.model, "fixture/model");
+          assert.deepEqual(codex.config.providerOptions, {
+            ...providerOptions, sandbox_mode: "danger-full-access", approval_policy: "never",
+          });
+          assert.notEqual(codex.config.providerOptions, providerOptions);
+          assert.deepEqual(request, original);
+        }
       }
     }
-    for (const provider of ["pi", "claude"]) {
+    for (const provider of ["pi", "claude", variant("pi"), variant("claude")]) {
+      const providerOptions = { sandbox_mode: "read-only", approval_policy: "untrusted", features: { example: true } };
       const result = await routeCreation(
-        {
-          config: {
-            cwd: workspaces[0],
-            provider,
-            modeId: "auto",
-            model: "fixture/model",
-          },
-        },
-        paseo,
+        { config: { cwd: workspaces[0], provider, modeId: "auto", model: "fixture/model", providerOptions } }, paseo,
       );
       assert.equal(result.config.modeId, "auto");
+      assert.equal(result.config.providerOptions, providerOptions);
+      assert.deepEqual(result.config.providerOptions, { sandbox_mode: "read-only", approval_policy: "untrusted", features: { example: true } });
     }
     const codexRequest = {
       config: {
@@ -297,6 +307,7 @@ test(
     assert.equal(first.env.SAFEHOUSE_ADD_DIRS, "");
     await fs.rm(path.join(workspaces[0], ".safehouse"));
     assert.equal((await status(paseo, workspaces[0])).state, "absent");
+    await assert.rejects(routeCreation({ config: { ...codexRequest.config, provider: variant("codex") } }, paseo), /missing/);
     const ordinary = {
       config: { cwd: workspaces[0], provider: "pi", model: "fixture/model" },
     };
