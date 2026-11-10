@@ -1,6 +1,6 @@
 # Paseo Safehouse development
 
-This repository owns the `paseo-safehouse` macOS plugin. Start with `README.md`, `docs/design.md`, and `docs/implementation.md`.
+This repository owns the `paseo-safehouse` macOS plugin. Start with `README.md`, `docs/design.md`, and `docs/validation.md`.
 The commissioned development workflow is `docs/dev/README.md`. Mutable task state lives on the `spacedock-state/dev` branch.
 
 ## Runtime boundaries

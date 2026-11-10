@@ -54,7 +54,7 @@ npm test
 ```
 
 The macOS tests require an installed Safehouse binary.
-The [implementation status](docs/implementation.md) records evidence and remaining acceptance checks.
+The [validation guide](docs/validation.md) describes the acceptance checks.
 The [development workflow](docs/dev/README.md) defines the review process.
 
 ## License

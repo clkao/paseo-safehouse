@@ -34,7 +34,7 @@ stages:
 
 Deliver a macOS beta that applies workspace Safehouse policies to native Paseo agents and supports dependable installation, discovery, launch, and resume.
 Each task produces or validates plugin code, tests, user-facing configuration, or a distributable release artifact.
-The release-review findings in `docs/implementation.md` seed the backlog.
+Task records in the state checkout contain review evidence and delivery history.
 Beta acceptance targets clean installations. Migration from existing installations is outside this workflow.
 
 The development agent runs outside Safehouse and controls an isolated test daemon.
@@ -45,7 +45,7 @@ The plugin uses Paseo's public extension APIs. Changes to Paseo core require a s
 
 Deliver an installable macOS beta that uses existing native harness configuration, applies a workspace's `.safehouse` policy, and preserves conversations through reload. Acceptance targets clean isolated Paseo 0.15.3 and Safehouse 0.12.0 installations. Publication follows a separate captain decision.
 
-The release requires working discovery, launch, real workspace access and denial, and native resume for Pi, Claude, and Codex. Validate cancellation, concurrent workspace isolation, policy reload, and installation failure handling on disposable fixtures. Test the exact packaged artifact on a fresh daemon. Reuse existing probes; add only cases needed to prove changed behavior.
+The release requires working discovery, launch, real workspace access and denial, and native resume for Pi, Claude, and Codex. Validate concurrent workspace isolation, policy reload, and installation failure handling on disposable fixtures. Test the exact packaged artifact on a fresh daemon. Reuse existing probes; add only cases needed to prove changed behavior.
 
 ### Scope and dispatch order
 

@@ -1,7 +1,8 @@
 # Validation plan
 
 This plan defines the evidence required to establish the [design](design.md).
-Results and outstanding work belong in [implementation status](implementation.md).
+Results and outstanding work belong in Spacedock task records under `docs/dev/.spacedock-state`.
+The lifecycle acceptance task is `23763z202asrmv8c7kmxjxgx`.
 
 ## Release gates
 
@@ -16,7 +17,7 @@ Results and outstanding work belong in [implementation status](implementation.md
 | Discovery                 | Variant catalogs load under Safehouse without workspace access. Native harness configuration supplies extension models. Discovery never borrows workspace grants. |
 | Failure handling          | Missing or invalid bootstrap environment, provider collisions, and unavailable Safehouse produce errors without a host fallback.                                 |
 | Status                    | Concise header states distinguish On, Off, Setup, and Error. Agent indicators distinguish policy preparation from runtime evidence.                              |
-| Process supervision       | Cancellation, child cleanup, exit reporting, and native resume retain expected behavior.                                                                         |
+| Process supervision       | Native resume preserves conversation history and applies the current policy.                                                                         |
 | Provider modes            | Codex launches through Safehouse automatically use Full Access and remain restricted by Safehouse. Unmanaged launches and other providers retain their modes.    |
 | Platform                  | Non-macOS hosts cannot configure or launch Safehouse variants.                                                                                                   |
 
@@ -39,9 +40,8 @@ These are required scenarios, not claims of completed implementation.
 
 ## Provider acceptance
 
-The first reference journey uses Pi with DeepSeek in ASR.
-A separate daemon isolates configuration experiments from active conversations.
-The existing ASR agent remains running throughout the journey.
+Use disposable workspaces and a separate daemon for provider acceptance.
+Keep existing conversations unchanged.
 
 Acceptance requires:
 
@@ -56,3 +56,27 @@ Acceptance requires:
 
 Claude and Codex require the same evidence through their own launch paths.
 Chat success alone does not establish sandbox enforcement.
+
+## Repeatable probes
+
+Run `npm run typecheck` and `npm test` with a working Node installation and an installed Safehouse binary.
+For Paseo adapter checks, set `PASEO_RUNTIME_MODULES` to the `node_modules` directory of an installed Paseo 0.15.3 CLI.
+Then run `node --import tsx --test test/launch.test.ts`.
+Without that variable, the adapter checks report a skip.
+
+Use `scripts/validate-codex-mode.mjs` for live creation and native resume checks.
+Set `SAFEHOUSE_TEST_HOME` to the isolated daemon home.
+Set `SAFEHOUSE_TEST_WORKSPACE` to a fixture JSON file with `workspace.id` and `workspace.workspaceDirectory`.
+Set `SAFEHOUSE_TEST_OUTPUT` to the evidence output path.
+The optional `SAFEHOUSE_TEST_ROUTING=1` adds disable, resume, and re-enable checks.
+
+Use `scripts/validate-setup-recovery.mjs` with `node --import tsx` for interrupted setup checks.
+Set `SAFEHOUSE_TEST_HOME` to the isolated daemon home.
+Run the `interrupt` phase.
+Restart that daemon.
+Then run the `retry` phase.
+The `retire` phase checks provider removal and restoration.
+
+Keep workspace fixtures outside the plugin source and daemon home.
+Disable dictation and voice mode in test daemons to avoid speech-model downloads.
+Store local daemon details and test results in task records, not in this guide.
