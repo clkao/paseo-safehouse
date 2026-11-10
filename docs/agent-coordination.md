@@ -20,52 +20,73 @@ A narrower grant needs a service that accepts only named operations.
 
 ## Rules
 
-1. **A prompt carries authority.** The recipient acts on it with its own access. A message may flow freely only to an agent with equal or narrower access.
-2. **A created agent is never wider than its creator.** The broker chooses the provider and the policy. The request cannot.
+1. **A prompt carries authority.** The recipient acts on it with its own access. A caller may send text only to an agent it created.
+2. **A created agent is never wider than its creator.** This covers file access and the permission mode. The broker chooses the provider, the policy, and the mode. The request cannot.
 3. **Operations are listed, not excluded.** Anything absent from the table below is refused.
 4. **The broker derives scope.** A caller-supplied agent or workspace identifier selects among the caller's permitted targets. It cannot add one.
 5. **Only a person turns Safehouse off.** No broker operation returns an ordinary provider launch or changes the workspace choice.
 
 ## Operations
 
-| Operation      | Request                                   | Result                                                        |
-| -------------- | ----------------------------------------- | ------------------------------------------------------------- |
-| Readiness      | Session credential                        | Which operations this session may use                         |
-| Create agent   | Prompt, title, model, child policy choice | A sandboxed child linked to the caller                        |
-| Read agent     | Permitted agent                           | Its status and the tail of its conversation                   |
-| Send message   | Permitted agent, text                     | Delivery with the caller recorded as the source               |
+| Operation    | Request                                                              | Result                                          |
+| ------------ | -------------------------------------------------------------------- | ----------------------------------------------- |
+| Readiness    | Session credential                                                   | Which operations this session may use           |
+| Create agent | Request ID, prompt, title, model, directory, child policy choice     | A sandboxed child linked to the caller          |
+| Read agent   | An agent the caller created                                          | Its status and the tail of its conversation     |
+| Send message | An agent the caller created, text                                    | Delivery with the caller recorded as the source |
 
 The broker also sends one message without a request: a completion notice to the creator when a child's turn ends.
 
-Excluded on purpose: answering a permission request, changing another agent's mode or settings, terminals, schedules, archiving or closing an agent the caller did not create, and any provider outside the Safehouse variants.
+Excluded on purpose: answering a permission request, changing any agent's mode or settings, terminals, schedules, archiving or closing an agent the caller did not create, and any provider outside the Safehouse variants.
 Each of these runs something with authority the caller does not hold, now or later.
 
 ### Permitted targets
 
 A family is a person-started agent and every agent created from it through the broker.
-A caller may read and message its creator, the agents it created, and other members of its family.
-Members of one family hold equal or narrower access than the member that created them, so these messages satisfy rule 1 in the downward direction.
-A message from a child to its creator travels upward. The creator already reads the child's final reply, so this adds no new channel, and the creator treats it as a report.
+Membership comes from the broker's protected records. A label the daemon stores on an agent is not evidence of membership.
+
+Read and send go downward only: from a creator to an agent it created.
+A child cannot send text to its creator, to a sibling, or to the person-started agent, and cannot read their conversations.
+A wider agent's conversation holds content from paths the child cannot reach, and a sent message can steer a wider agent's turn.
+The one upward flow is the completion notice, which the broker writes from the child's final reply.
+That reply is content the creator already reads today.
+
+### Creation limits
+
+A retry carries the same request ID, so a lost response does not create a second child.
+The broker bounds the number of live children per caller, the depth of a family, and concurrent creations.
+The model must appear in the Safehouse variant's catalog. The broker rejects any other value.
+The broker creates the child without a prompt, confirms the recorded provider is a variant this plugin owns, and only then sends the prompt.
 
 ### Child policy
 
-The create request selects one of two choices. Neither needs a comparison between two policies.
+The create request selects one of two choices.
 
-| Choice         | Child access                                                                                   |
-| -------------- | ---------------------------------------------------------------------------------------------- |
-| Same as caller | The caller's captured policy snapshot, reused for the child                                    |
-| Workspace only | The child's process directory with Safehouse defaults. Any `.safehouse` file there is ignored. |
+| Choice         | Child access                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| Same as caller | The caller's captured policy snapshot, reused for the child                               |
+| Workspace only | The child's directory with Safehouse defaults and the caller's custom profiles            |
 
-Workspace only requires the child's directory to lie inside a location the caller can write.
-The child always launches through a Safehouse provider variant, whatever the workspace choice says.
-The opening hook must select the child's snapshot from the broker's record for that agent, not from the directory's source policy.
+The broker builds the child's snapshot when it accepts the request, from the directory's resolved path at that moment.
+The opening hook selects that recorded snapshot. It does not resolve the directory or read a source policy again for a broker-created child.
+A directory replaced by a link after the request therefore cannot change the child's access.
 
-### Permission requests
+Workspace only requires the resolved directory to lie inside the caller snapshot's workspace directory or one of its read-write grants.
+Access the caller holds through Safehouse defaults or custom profiles does not qualify a directory.
+A `.safehouse` file in the child's directory is ignored.
+The caller's custom profiles are copied into the child's snapshot, because a profile can deny access that the defaults allow.
 
-A dispatching agent outside Safehouse can answer a worker's permission request through Paseo.
-This design excludes that operation, because an answer grants an action the worker asked for and the caller may not understand.
-Broker-created children therefore launch in the provider's no-prompt mode, with Safehouse as the boundary.
-The plugin already does this for Codex. Whether it is acceptable for every Claude worker is an open question for review.
+Same as caller is refused when the workspace's source policy no longer resolves to the caller's captured digest. The caller needs a reload first.
+
+### Permission mode and requests
+
+A child launches in its creator's permission mode, or a stricter one. It is never more permissive.
+Safehouse allows outbound network access by default, so for a prompting agent the approval prompt is the only control on a push or an upload.
+A child that skipped prompts would let a prompting creator do those through it.
+
+A child's permission request goes to the person, as it does today. The broker has no operation that answers one.
+A dispatching agent that already runs without prompts gets children that run without prompts. No authority is added.
+The plugin launches Codex under Safehouse without prompts, because Codex cannot nest its own sandbox. A prompting caller's request for a Codex child is therefore refused.
 
 ## Completion notice
 
@@ -82,16 +103,27 @@ Without this, a reload leaves the dispatching agent asleep with no notice coming
 Two families can hold different access, so a message between them can raise authority.
 A person approves each link in the Safehouse panel. The default is no link.
 
-| Property  | Design                                                                                 |
-| --------- | -------------------------------------------------------------------------------------- |
-| Direction | One way. A link from A to B does not let B start a conversation with A.                |
-| Endpoint  | The person-started agent of the other family, not its workers                          |
-| Kinds     | Read only, or read and message                                                         |
-| Storage   | Protected plugin state. A workspace file is writable by the agent it would authorize.  |
+| Property  | Design                                                                                |
+| --------- | ------------------------------------------------------------------------------------- |
+| Direction | One way for requests. A link from A to B does not let B send a request to A.          |
+| Endpoints | The person-started agent of each family. Workers cannot use a link.                   |
+| Kinds     | Read only, or read and message                                                        |
+| Storage   | Protected plugin state. A workspace file is writable by the agent it would authorize. |
 
-A read-and-message link from A to B means A can ask B to act with B's access. The panel states this when the link is created.
+A read-and-message link from A to B means A can ask B to act with B's access.
+B's answer returns as a broker-written notice of B's final reply, with B as the recorded source. B has no send operation toward A.
+That answer is still text from B that A will read. The panel states both effects when the person creates the link.
 A read-only link sends nothing to B. Its cost is that A sees what B's conversation contains.
-A reply from B travels on the same link and carries B as the recorded source.
+
+## Limits this design does not remove
+
+Safehouse's Claude profile grants every sandboxed Claude agent read and write access to the shared `~/.claude` folder and `~/.claude.json`.
+A sandboxed Claude agent can therefore read other Claude sessions' stored conversations, whatever family they belong to.
+It can also change settings that later Claude sessions load, including sessions outside Safehouse.
+This holds today, without this design. The claims above about narrower children and approved links do not hold for Claude until each agent has separate harness state.
+
+A policy that enables Safehouse's `process-control` or `lldb` capability lets its agent read other processes' arguments and environment.
+The broker does not issue a session credential to an agent whose policy enables either one.
 
 ## Transport
 
@@ -105,12 +137,18 @@ The probe did not separate the two possible causes: the disabled agent-side Pase
 
 The credential currently reaches the harness inside its MCP configuration.
 [Workspace capabilities](workspace-capabilities.md) requires tokens to stay out of command arguments.
-The implementation must find a placement that meets that rule, or show that one sandboxed agent cannot read another's arguments.
+The implementation must find a placement that meets that rule.
+Safehouse 0.13.0 denies reading another sandbox's process arguments by default. That default was read in the profile, not exercised.
 
 ## Probe results
 
 Run on 2026-11-10 against a separate daemon: Paseo 0.15.4, this plugin at `74d6be1` with a probe patch, Claude with model `claude-haiku-5-5`.
 Safehouse 0.12.0 was used for the transport rows and the unlabelled send. Safehouse 0.13.0 was used for the creation and notice rows.
+The beta target is Paseo 0.15.3 and Safehouse 0.12.0, so these versions differ from it.
+
+Every agent in these runs used Claude's `bypassPermissions` mode. No row exercises a prompting caller or a prompting child.
+The rows are observations read from agent conversations during the runs. The probe kept a log only for the busy-creator notice and the recorded parent.
+A repeat on the beta target should keep the conversation and broker log for each row.
 
 | Check                                                                                  | Result                                                                                      |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -125,18 +163,19 @@ Safehouse 0.12.0 was used for the transport rows and the unlabelled send. Safeho
 | The plugin reads another agent's status and conversation tail                          | Passed                                                                                      |
 | A loopback client with no credential lists agents                                      | Passed, which is why the port stays closed                                                  |
 
-Not tested: Codex and Pi as caller or child, a forged source from inside the sandbox, notice delivery after a plugin reload, reuse of a caller's snapshot for a child, and credential placement.
+Not tested: a prompting caller or child, Codex and Pi as caller or child, a forged source from inside the sandbox, notice delivery after a plugin reload, a snapshot recorded at request time, the creation limits, and credential placement.
 
 ## Feasibility gates and implementation order
 
-1. Reuse the caller's snapshot for a broker-created child. Show the child cannot reach a path the caller cannot, including when the child's directory holds its own `.safehouse`.
-2. Persist pending completion notices. Reload the plugin while a child runs and show the creator still wakes once.
-3. Add session credentials, family records, and the four operations. Reject forged identifiers, another session's credential, a revoked credential, a target outside the family, and every excluded operation.
-4. Repeat the probes with Codex as caller and as child.
-5. Run a dispatching agent inside Safehouse through one complete dispatch: create, wait, wake, read, follow up.
-6. Add person-approved links between families, read only first.
+1. Record a child's snapshot at request time and have the opening hook select it. Show the child cannot reach a path the caller cannot: when its directory holds a `.safehouse`, when the directory is replaced by a link after the request, and when the caller's policy carries a custom profile.
+2. Launch a child from a prompting caller. Show the child prompts, the request reaches the person, and no broker operation answers it.
+3. Persist pending completion notices. Reload the plugin while a child runs and show the creator still wakes once.
+4. Add session credentials, family records, creation limits, and the four operations. Reject forged identifiers, another session's credential, a revoked credential, an upward or sideways target, a model outside the variant's catalog, a policy that enables `process-control`, and every excluded operation.
+5. Repeat the probes on the beta target, with Codex as caller and as child, keeping a log for each row.
+6. Run a dispatching agent inside Safehouse through one complete dispatch: create, wait, wake, read, follow up.
+7. Add person-approved links between families, read only first.
 
-Gates 1 to 3 are security-boundary changes and need failing regressions and independent validation before any claim of support.
+Gates 1 to 4 are security-boundary changes and need failing regressions and independent validation before any claim of support.
 
 ## Source basis
 
