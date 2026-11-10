@@ -5,7 +5,9 @@ This document specifies the intended behavior. The [validation plan](validation.
 
 ## Workspace policy
 
-The presence of `.safehouse` selects Safehouse for new agents unless the workspace choice disables automatic routing.
+New agents use Safehouse unless a saved workspace choice disables automatic routing.
+Creation uses the request directory before any workspace ID or header exists.
+An absent `.safehouse` selects default access without creating a file or routing record.
 The file authorizes its declared access by default. Launch does not require a separate approval record.
 The policy file and its custom profiles are trusted inputs for each new process.
 Invalid directives, unavailable paths, and unsupported capabilities fail rather than fall back to an ordinary launch.
@@ -14,23 +16,28 @@ The panel offers **Review access** to inspect or edit directory grants, capabili
 **Refresh providers** remains available after setup. The panel lists unavailable providers and their reasons.
 **Save policy** writes the source file after preview and a check for concurrent edits.
 Existing policy bytes remain unchanged unless the user edits them.
-If `.safehouse` is absent and automatic routing is not explicitly enabled, new ordinary-provider launches keep their native behavior.
+Default access includes the writable workspace and Safehouse’s built-in system, toolchain, network, temporary-directory, and harness access.
+No additional directories, optional capabilities, or custom profiles apply. Fixed plugin protections remain active.
 The panel can create a policy; optional capabilities start unselected.
 
 The policy fingerprint includes the canonical workspace, source bytes, resolved grants, and custom profile contents.
-It identifies launch snapshots and policy changes.
+It identifies launch snapshots and policy changes. Defaults and an empty file have the same effective fingerprint.
+A separate edit revision distinguishes absence from an empty file. Each reviewed candidate retains its captured revision.
+Concurrent source changes invalidate the review and preserve the draft until the user reviews access again.
 Safehouse supplies baseline system, toolchain, network, and harness access. The panel distinguishes this baseline from additional grants.
 
 New processes use the current policy. Running processes keep their captured snapshots.
-If `.safehouse` disappears, existing Safehouse agents cannot resume until a policy is restored.
+If `.safehouse` disappears, subsequent launches and reloads use defaults.
+Invalid, unreadable, oversized, non-regular, and symlinked sources block Safehouse launches.
 Their stored providers do not change to ordinary providers automatically.
 
 ## User interface
 
 | Workspace state                     | Header                | Action                       |
 | ----------------------------------- | --------------------- | ---------------------------- |
-| No policy                           | Safehouse auto off         | Create a policy              |
-| Valid policy and ready providers    | Safehouse auto on          | Inspect or edit access       |
+| No policy, ready providers          | Safehouse On          | Inspect defaults or add access |
+| Saved Off choice                    | Safehouse Off         | Enable automatic Safehouse   |
+| Valid policy and ready providers    | Safehouse On          | Inspect or edit access       |
 | Invalid policy or unreadable inputs | Safehouse error       | Show the specific error      |
 | Provider setup required             | Safehouse setup       | Configure providers          |
 | Non-macOS host                      | Safehouse unavailable | Explain the host requirement |
@@ -49,9 +56,10 @@ The header menu selects **Enable automatic Safehouse**, **Disable automatic Safe
 The selection applies across clients until changed. It leaves policy bytes and running agents unchanged.
 The daemon stores one atomic record per canonical workspace beneath protected `safehouse/workspaces/` state.
 Malformed records block creation. Disable requires a resolvable workspace but does not parse the policy.
-Explicit enable persists without a policy and blocks new ordinary launches until the policy is valid.
+Explicit enable persists without a policy. New launches then use defaults.
 An explicit off choice takes precedence in the header. The panel still reports policy errors.
-Existing Safehouse agents always require a policy when they resume, regardless of automatic routing.
+Existing Safehouse agents use the current file or defaults on resume, regardless of automatic routing.
+When current policy resolution fails, receipts retain their preparation status and show that the current policy is unavailable.
 
 Known limitation: the header context identifies a workspace, not a draft.
 All clients share the selection, so a concurrent launch can observe the same choice.
@@ -66,8 +74,8 @@ Paseo appends protocol arguments and manages the conversation.
 
 ```text
 Ordinary provider selection
-    → creation hook reads workspace policy
-    → workspace with a policy selects its Safehouse provider variant
+    → creation hook checks the saved routing choice from the directory
+    → unless Off, select the Safehouse variant and validate file or defaults
     → opening hook prepares a protected policy snapshot
     → bootstrap starts Safehouse with the native harness
 ```
@@ -214,7 +222,7 @@ It copies `providerOptions` and sets `sandbox_mode: danger-full-access` and `app
 These explicit values override conflicting request configuration and provider defaults, which take precedence over the selected mode.
 Safehouse enforces the outer process boundary. Codex does not create an inner sandbox or request tool approvals.
 Other provider options and the selected model remain intact. The hook does not mutate the caller’s request.
-Ordinary Codex launches in unmanaged workspaces retain their selected mode and provider options.
+Ordinary Codex launches with a saved Off choice retain their selected mode and provider options.
 
 Paseo stores the explicit values with each new managed session and supplies them during native resume.
 The opening hook validates the current workspace policy and prepares the outer sandbox snapshot.

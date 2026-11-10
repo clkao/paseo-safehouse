@@ -12,6 +12,8 @@ import {
   policyEnvironment,
   prepareSnapshot,
   resolvePolicy,
+  loadPolicy,
+  readSource,
   run,
 } from "../server/policy";
 
@@ -281,4 +283,55 @@ a('child',()=>{fs.mkdirSync(${q(path.join(cwd, "made"))},{recursive:true});fs.wr
     t.diagnostic(JSON.stringify({ result, observer }));
     assert.deepEqual({ result, observer }, { result: { exact: "allowed", trimmedRead: "EPERM", trimmedWrite: "EPERM" }, observer: { exact: "ok", trimmed: null } });
   });
+});
+
+
+test("absent source defaults protect policy creation and fixed boundaries", { skip: process.platform !== "darwin" }, async (t) => {
+  const binary = await findExecutable("safehouse");
+  assert.ok(binary);
+  const base = await fs.mkdtemp(path.join(os.homedir(), ".safehouse-defaults-"));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const cwd = path.join(base, "workspace"), root = path.join(base, "state"), secret = path.join(base, "private", "canary");
+  for (const dir of [cwd, root, path.dirname(secret)]) await fs.mkdir(dir);
+  const plugin = path.join(cwd, "protected-code");
+  await fs.writeFile(secret, "fixture"); await fs.writeFile(plugin, "fixture");
+  const listener = http.createServer((_req, res) => res.end("fixture"));
+  listener.listen(0, "127.0.0.1"); await once(listener, "listening");
+  t.after(() => listener.close());
+  const port = (listener.address() as { port: number }).port;
+  assert.equal(await readSource(cwd), null);
+  const snapshot = await prepareSnapshot(root, await loadPolicy(cwd, []));
+  const guard = path.join(root, "guard.sb"), bootstrap = path.join(root, "launch.sh");
+  await fs.writeFile(guard, guardProfile([root], [plugin], [port]));
+  await fs.writeFile(bootstrap, renderBootstrap({ root, binary, guard, executable: process.execPath, host: "claude" }));
+  const q = JSON.stringify;
+  const probe = `const fs=require('node:fs'),net=require('node:net');const r={};
+const a=(k,f)=>{try{r[k]=f()??'allowed'}catch(e){r[k]=e.code}};
+a('workspace',()=>{fs.writeFileSync(${q(path.join(cwd, 'ok'))},'ok');return fs.readFileSync(${q(path.join(cwd, 'ok'))},'utf8')});
+a('private',()=>fs.readFileSync(${q(secret)},'utf8'));
+a('policy',()=>fs.writeFileSync(${q(path.join(cwd,'.safehouse'))},'bad'));
+a('snapshot',()=>fs.writeFileSync(${q(path.join(snapshot,'.safehouse'))},'bad'));
+a('state',()=>fs.writeFileSync(${q(guard)},'bad'));
+a('stateRead',()=>fs.readFileSync(${q(guard)},'utf8'));
+a('plugin',()=>fs.writeFileSync(${q(plugin)},'bad'));
+const s=net.connect(${port},'127.0.0.1');s.setTimeout(2000);s.on('connect',()=>{r.endpoint='allowed';s.destroy()});s.on('error',e=>r.endpoint=e.code);s.on('timeout',()=>{r.endpoint='timeout';s.destroy()});s.on('close',()=>console.log(JSON.stringify(r)));`;
+  const launch = async () => JSON.parse((await run("/bin/sh", [bootstrap, "-e", probe], { cwd, env: policyEnvironment(process.env, snapshot), timeout: 45000 })).stdout);
+  const grade = (r: Record<string, string>) => {
+    assert.equal(r.workspace, "ok");
+    for (const key of ["private", "policy", "snapshot", "state", "stateRead", "plugin", "endpoint"]) assert.equal(r[key], "EPERM", key);
+  };
+  const protectedFiles = [plugin, guard, path.join(snapshot, ".safehouse")];
+  const before = await Promise.all(protectedFiles.map(file => fs.readFile(file, "utf8")));
+  const result = await launch(); grade(result);
+  assert.equal(await readSource(cwd), null);
+  assert.deepEqual(await Promise.all(protectedFiles.map(file => fs.readFile(file, "utf8"))), before);
+  await fs.writeFile(path.join(snapshot, "workspace.sb"), "; deliberately removed policy guard\n");
+  const unguarded = await launch();
+  assert.throws(() => grade(unguarded)); assert.equal(unguarded.policy, "allowed");
+  assert.equal(await readSource(cwd), "bad");
+  await fs.rm(path.join(cwd, ".safehouse"));
+  const direct = JSON.parse((await run(process.execPath, ["-e", probe], { cwd, timeout: 10000 })).stdout);
+  assert.throws(() => grade(direct));
+  for (const key of ["policy", "snapshot", "state", "plugin", "endpoint"]) assert.equal(direct[key], "allowed");
+  t.diagnostic(`Defaults: ${JSON.stringify(result)}; guard removal allowed policy creation; direct control violated fixed denials.`);
 });

@@ -11,6 +11,7 @@ export const statusRpc = defineRpc({
     configured: z.boolean(),
     routingEnabled: z.boolean(),
     raw: z.string().nullable(),
+    policySource: z.enum(["defaults", "file"]).nullable(),
     revision: z.string(),
     digest: z.string().nullable(),
     policyValid: z.boolean(),

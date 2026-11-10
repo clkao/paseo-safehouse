@@ -12,7 +12,7 @@ export type ProviderConfig = Providers[string] & {
 const factories = ["pi", "claude", "codex", "copilot", "cursor", "opencode", "omp"];
 const specialAcp = ["cursor", "kimi", "kiro", "traecli", "hub-e2e"];
 export const launchError = (id: string, reason: string) => Object.assign(new Error(
-  `Safehouse provider ${id}: ${reason}. Disable automatic Safehouse in this workspace to launch the ordinary provider.`,
+  `Safehouse provider ${id}: ${reason}. Repair the reported problem and retry. When a workspace header is available, Disable automatic Safehouse there permits a separate ordinary launch.`,
 ), { name: "SafehouseLaunchError" });
 export async function configuredProvider(id: string, providers: Providers) {
   const config = (providers[id] ?? {}) as ProviderConfig;

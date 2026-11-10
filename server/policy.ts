@@ -188,12 +188,7 @@ export async function resolvePolicy(
 }
 export type ResolvedPolicy = Awaited<ReturnType<typeof resolvePolicy>>;
 export async function loadPolicy(cwd: string, features: string[]) {
-  const raw = await readSource(cwd);
-  if (raw === null)
-    throw new Error(
-      "SAFEHOUSE_POLICY_MISSING: .safehouse is missing. Create or restore it before launching or resuming a Safehouse agent.",
-    );
-  return resolvePolicy(raw, cwd, features);
+  return resolvePolicy((await readSource(cwd)) ?? "", cwd, features);
 }
 export function guardProfile(
   readDenied: string[],
@@ -261,6 +256,7 @@ export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
     throw error;
   }
 }
+export const policyRevision = (raw: string | null) => hash(JSON.stringify(raw));
 export async function savePolicy(
   cwd: string,
   policy: ResolvedPolicy,
@@ -270,7 +266,7 @@ export async function savePolicy(
   const lock = await fs.open(`${file}.safehouse-lock`, "wx", 0o600);
   try {
     const current = await readSource(cwd);
-    if (hash(current ?? "") !== expectedRevision)
+    if (policyRevision(current) !== expectedRevision)
       throw new Error(".safehouse changed on disk. Review the new contents.");
     if (current !== policy.raw) await atomicWrite(file, policy.raw);
   } finally {

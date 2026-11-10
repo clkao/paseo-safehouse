@@ -10,6 +10,7 @@ import {
   hash,
   macOnly,
   policyEnvironment,
+  policyRevision,
   prepareSnapshot,
   readSource,
   loadPolicy,
@@ -23,6 +24,9 @@ import {
   variant,
   prepareOpening,
   status,
+  reload,
+  preview,
+  save,
 } from "../server/service";
 
 test("policy parser rejects unknown directives and preserves custom profile names", () => {
@@ -76,43 +80,31 @@ test("existing policies authorize launch and snapshots preserve their captured b
     "; reviewed profile\n",
   );
   await fs.rm(path.join(cwd, ".safehouse"));
-  await assert.rejects(loadPolicy(canonical, []), /missing/);
+  assert.equal((await loadPolicy(canonical, [])).raw, "");
 });
 test("concurrent save rejects stale review and symlink policy sources", async (t) => {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-source-"));
   t.after(() => fs.rm(cwd, { recursive: true, force: true }));
   const policy = await resolvePolicy("", cwd, []);
   await fs.writeFile(path.join(cwd, ".safehouse"), "# another editor\n");
-  await assert.rejects(savePolicy(cwd, policy, hash("")), /changed on disk/);
+  await assert.rejects(savePolicy(cwd, policy, policyRevision(null)), /changed on disk/);
+  await fs.rm(path.join(cwd, ".safehouse"));
+  const snapshot = await prepareSnapshot(path.join(cwd, "state"), policy);
+  const captured = await fs.readFile(path.join(snapshot, ".safehouse"), "utf8");
+  await fs.writeFile(path.join(cwd, ".safehouse"), "");
+  await assert.rejects(savePolicy(cwd, policy, policyRevision(null)), /changed on disk/);
+  await fs.rm(path.join(cwd, ".safehouse"));
+  await assert.rejects(savePolicy(cwd, policy, policyRevision("")), /changed on disk/);
+  await savePolicy(cwd, policy, policyRevision(null));
+  assert.equal(await readSource(cwd), "");
+  assert.equal(await fs.readFile(path.join(snapshot, ".safehouse"), "utf8"), captured);
   await fs.rm(path.join(cwd, ".safehouse"));
   await fs.symlink("target", path.join(cwd, ".safehouse"));
   await assert.rejects(readSource(cwd), /regular file/);
 });
-test("unmanaged workspaces retain ordinary provider selection without daemon calls", async (t) => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-unmanaged-:\r\n"));
-  t.after(() => fs.rm(cwd, { recursive: true, force: true }));
-  const forbidden = new Proxy(
-    {},
-    {
-      get() {
-        throw new Error("Unexpected daemon access");
-      },
-    },
-  ) as Parameters<typeof routeCreation>[1];
-  for (const provider of ["pi", "claude", "codex"]) {
-    for (const modeId of [undefined, "auto", "read-only", "full-access"]) {
-      const providerOptions = { sandbox_mode: "workspace-write", approval_policy: "on-request" };
-      const request = { config: { provider, cwd, modeId, providerOptions } };
-      assert.equal(await routeCreation(request, forbidden), request);
-      assert.equal(request.config.providerOptions, providerOptions);
-      assert.deepEqual(providerOptions, { sandbox_mode: "workspace-write", approval_policy: "on-request" });
-    }
-  }
-  assert.equal(variant("pi"), "safehouse-pi");
-});
 
 test(
-  "policy presence routes new agents and existing sandboxed agents require a policy",
+  "default routing and policy transitions preserve provider identity",
   { skip: process.platform !== "darwin" },
   async (t) => {
     const base = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-routing-"));
@@ -190,7 +182,7 @@ test(
       const cwd = path.join(base, name);
       await fs.mkdir(cwd);
       const canonical = await fs.realpath(cwd);
-      await fs.writeFile(path.join(canonical, ".safehouse"), "");
+
       workspaces.push(canonical);
     }
     // Old review records cannot gate a workspace's current policy.
@@ -203,9 +195,23 @@ test(
         approvedAt: "old",
       },
     );
+    const noHeader = { ...paseo, workspaces: { ref() { throw new Error("No workspace exists yet"); } } } as unknown as typeof paseo;
+    const firstLaunch = await routeCreation({ config: { cwd: workspaces[0], provider: "pi", model: "chosen" } }, noHeader);
+    assert.equal(firstLaunch.config.provider, "safehouse-pi");
+    assert.equal(firstLaunch.config.model, "chosen");
+    assert.equal(await readSource(workspaces[0]), null);
+    await assert.rejects(fs.access(path.join(root, "workspaces")));
     const initialStatus = await status(paseo, workspaces[0]);
     assert.equal(initialStatus.state, "ready");
     assert.equal(initialStatus.policyValid, true);
+    assert.equal(initialStatus.routingEnabled, true);
+    assert.equal(initialStatus.policySource, "defaults");
+    assert.ok(initialStatus.digest);
+    await fs.writeFile(path.join(workspaces[0], ".safehouse"), "");
+    const emptyStatus = await status(paseo, workspaces[0]);
+    assert.equal(emptyStatus.digest, initialStatus.digest);
+    assert.notEqual(emptyStatus.revision, initialStatus.revision);
+    assert.equal(emptyStatus.policySource, "file");
     assert.equal((await status(paseo, workspaces[1])).state, "ready");
     const routed = await routeCreation(
       { config: { cwd: workspaces[0], provider: "pi" } },
@@ -377,27 +383,77 @@ test(
     assert.equal(first.env.SAFEHOUSE_ADD_DIRS, "");
     await fs.rm(path.join(workspaces[0], ".safehouse"));
     assert.equal((await status(paseo, workspaces[0])).state, "off");
-    await assert.rejects(routeCreation({ config: { ...codexRequest.config, provider: variant("codex") } }, paseo), /missing/);
+    assert.equal((await routeCreation({ config: { ...codexRequest.config, provider: variant("codex") } }, paseo)).config.provider, variant("codex"));
     const ordinary = {
       config: { cwd: workspaces[0], provider: "pi", model: "fixture/model" },
     };
     assert.equal(await routeCreation(ordinary, paseo), ordinary);
     await setWorkspaceRouting(paseo, workspaces[0], true);
-    await assert.rejects(routeCreation(ordinary, paseo), /missing/);
-    assert.equal((await status(paseo, workspaces[0])).state, "invalid");
+    assert.equal((await routeCreation(ordinary, paseo)).config.provider, variant("pi"));
+    assert.equal((await status(paseo, workspaces[0])).state, "ready");
     const ordinaryOpening = { ...opening(workspaces[0], "ordinary"), provider: "pi", reason: "resume" as const };
     assert.equal(await prepareOpening(ordinaryOpening, paseo), ordinaryOpening);
-    await assert.rejects(
-      prepareOpening(
-        { ...opening(workspaces[0], "agent-0"), reason: "resume" },
-        paseo,
-      ),
-      /missing/,
-    );
+    const resumed = await prepareOpening({ ...opening(workspaces[0], "agent-0"), reason: "resume" }, paseo);
+    assert.equal(resumed.agentId, "agent-0");
+    assert.equal(resumed.provider, variant("pi"));
+    running.push({ agent: { id: "agent-0", workspaceId: workspaces[0], provider: "safehouse-pi", providerOptions: { keep: true } } });
+    assert.equal((await status(paseo, workspaces[0])).agents[0].changed, false);
+    await fs.writeFile(path.join(workspaces[0], ".safehouse"), `add-dirs-ro=${workspaces[1]}\n`);
+    assert.equal((await status(paseo, workspaces[0])).agents[0].changed, true);
+    await fs.rm(path.join(workspaces[0], ".safehouse"));
+    let reloads = 0;
+    const reloadPaseo = { ...paseo, agents: { ...paseo.agents, ref: () => ({
+      workspaceId: workspaces[0], refresh: async () => {}, current: () => ({ provider: variant("pi") }), reload: async () => { reloads++; },
+    }) } } as unknown as typeof paseo;
+    await setWorkspaceRouting(paseo, workspaces[0], false);
+    await reload(reloadPaseo, workspaces[0], "agent-0");
+    assert.equal(reloads, 1);
+    await fs.rm(choiceFile); // Exercise errors on the no-choice first-launch path.
+    const sourceFile = path.join(workspaces[0], ".safehouse");
+    for (const [kind, create] of Object.entries({
+      syntax: () => fs.writeFile(sourceFile, "invalid=policy"),
+      capability: () => fs.writeFile(sourceFile, "enable=unsupported"),
+      directory: () => fs.mkdir(sourceFile),
+      oversized: () => fs.writeFile(sourceFile, "#".repeat(1024 * 1024 + 1)),
+      dangling: () => fs.symlink("missing", sourceFile),
+      symlink: () => fs.symlink(path.join(home, "config.json"), sourceFile),
+      unreadable: async () => { await fs.writeFile(sourceFile, ""); await fs.chmod(sourceFile, 0); },
+    })) {
+      await create();
+      await assert.rejects(routeCreation(ordinary, noHeader), { name: "SafehouseLaunchError" }, kind);
+      await assert.rejects(prepareOpening(opening(workspaces[0], "agent-0"), paseo));
+      await assert.rejects(reload(reloadPaseo, workspaces[0], "agent-0"));
+      const failed = await status(paseo, workspaces[0]);
+      assert.equal(failed.state, "invalid"); assert.equal(failed.policyValid, false);
+      assert.equal(failed.agents[0].changed, false);
+      assert.ok(failed.agents[0].preparedAt);
+      assert.equal(failed.policySource, ["syntax", "capability"].includes(kind) ? "file" : null);
+      await fs.rm(sourceFile, { recursive: true, force: true });
+    }
+    assert.equal(reloads, 1);
+    await routeCreation(ordinary, noHeader);
+    await fs.writeFile(sourceFile, "# created between create and open");
+    const updated = await prepareOpening(opening(workspaces[0], "agent-0"), paseo);
+    assert.notEqual(updated.env.SAFEHOUSE_WORKDIR, resumed.env.SAFEHOUSE_WORKDIR);
+    assert.equal((await status(paseo, workspaces[0])).agents[0].changed, false);
+    await fs.rm(sourceFile);
+    assert.equal((await status(paseo, workspaces[0])).agents[0].changed, true);
+    await fs.writeFile(sourceFile, "invalid=between-hooks");
+    await assert.rejects(prepareOpening(opening(workspaces[0], "agent-0"), paseo), /unsupported setting/);
+    await fs.rm(sourceFile);
     assert.equal(
       (await prepareOpening(opening(workspaces[1], "agent-1"), paseo)).provider,
       variant("pi"),
     );
+    await fs.rm(path.join(root, "installation.json"));
+    assert.equal((await status(paseo, workspaces[0])).state, "setup");
+    assert.equal((await status(paseo, workspaces[0])).policySource, "defaults");
+    await assert.rejects(routeCreation(ordinary, noHeader), /Repair the reported problem and retry/);
+    await setWorkspaceRouting(paseo, workspaces[0], true);
+    assert.equal((await status(paseo, workspaces[0])).state, "setup");
+    assert.equal((await status(paseo, workspaces[0])).routingEnabled, true);
+    await setWorkspaceRouting(paseo, workspaces[0], false);
+    assert.equal(await routeCreation(ordinary, noHeader), ordinary);
   },
 );
 
@@ -549,8 +605,14 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   await fs.writeFile(path.join(base, ".safehouse"), "invalid=setting");
   await assert.rejects(routeCreation(request, paseo), /unsupported setting.*Disable automatic Safehouse/);
   await fs.rm(path.join(base, ".safehouse"));
-  await assert.rejects(routeCreation({ config: { ...request.config, provider: "safehouse-custom" } }, paseo), /launching or resuming.*Disable automatic Safehouse/);
+  assert.equal((await routeCreation({ config: { ...request.config, provider: "safehouse-custom" } }, paseo)).config.provider, "safehouse-custom");
   await fs.writeFile(path.join(base, ".safehouse"), "");
+  const review = await preview(paseo, base, "# reviewed");
+  const revision = (await status(paseo, "fixture")).revision;
+  await assert.rejects(save(paseo, base, "# reviewed", revision, "wrong-digest"), /Resolved access changed/);
+  assert.equal(await readSource(base), "");
+  await save(paseo, base, "# reviewed", revision, review.digest);
+  assert.equal(await readSource(base), "# reviewed");
   providers.copilot.env.BASE = "changed";
   await assert.rejects(routeCreation(request, paseo), /Refresh providers/);
   assert.equal(request.config.provider, "custom");

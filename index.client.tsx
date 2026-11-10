@@ -95,7 +95,9 @@ export default function contribute(client: PluginClientContext) {
           for (const agent of status.agents) {
             seenAgents.add(agent.id);
             const label = agent.preparedAt
-              ? agent.changed
+              ? !status.policyValid
+                ? "Safehouse · policy prepared; current policy unavailable"
+                : agent.changed
                 ? "Safehouse · policy changed"
                 : "Safehouse · policy prepared"
               : "Safehouse · no launch record";
