@@ -21,7 +21,7 @@ A narrower grant needs a service that accepts only named operations.
 ## Rules
 
 1. **A prompt carries authority.** The recipient acts on it with its own access. A caller may send text only to an agent it created.
-2. **A created agent is never wider than its creator.** This covers file access and the permission mode. The broker chooses the policy and the mode. The request names a provider, and the broker accepts only a Safehouse variant this plugin owns.
+2. **A created agent is never wider than its creator.** This covers file access and the permission mode. The broker chooses the policy and the mode. The request names a provider, and the broker launches only a Safehouse variant this plugin owns.
 3. **Operations are listed, not excluded.** Anything absent from the table below is refused.
 4. **The broker derives scope.** A caller-supplied agent or workspace identifier selects among the caller's permitted targets. It cannot add one.
 5. **Only a person turns Safehouse off.** No broker operation returns an ordinary provider launch or changes the workspace choice.
@@ -56,7 +56,9 @@ A creator reads that reply today when it chooses to. With this design the reply 
 
 A retry carries the same request ID, so a lost response does not create a second child.
 The broker bounds the number of live children per caller, the depth of a family, and concurrent creations.
-The provider must be a Safehouse variant recorded in this plugin's installation, and the model must appear in that variant's catalog. The broker rejects any other value.
+The request names an ordinary provider or its Safehouse variant, and the model must appear in that provider's catalog. The broker rejects any other value.
+An ordinary provider is replaced by its variant, as `routeCreation` does for a person's launch. The workspace choice cannot turn this off for a broker request.
+Naming the variant directly loads the variant's own catalog. That failed in the probe for a Codex install outside Safehouse's default locations, because discovery uses no workspace grants.
 The broker creates the child without a prompt, confirms the recorded provider is a variant this plugin owns, and only then sends the prompt.
 
 ### Child policy
@@ -151,7 +153,7 @@ Safehouse 0.13.0 denies reading another sandbox's process arguments by default. 
 
 ## Probe results
 
-Run on 2026-11-10 against a separate daemon: Paseo 0.15.4, this plugin at `74d6be1` with a probe patch, Claude with model `claude-haiku-5-5`.
+Run on 2026-11-10 against a separate daemon: Paseo 0.15.4, this plugin at `74d6be1` with a probe patch, Claude with model `claude-haiku-5-5`, and Codex 0.162.1 with model `gpt-6-luna`.
 Safehouse 0.12.0 was used for the transport rows and the unlabelled send. Safehouse 0.13.0 was used for the creation and notice rows.
 The beta target is Paseo 0.15.3 and Safehouse 0.12.0, so these versions differ from it.
 
@@ -171,8 +173,14 @@ A repeat on the beta target should keep the conversation and broker log for each
 | The recipient can tell the message from one a person typed                             | Passed with `sourceAgentId` set. Without it the message arrived as an ordinary user turn.   |
 | The plugin reads another agent's status and conversation tail                          | Passed                                                                                      |
 | A loopback client with no credential lists agents                                      | Passed, which is why the port stays closed                                                  |
+| A sandboxed Codex agent calls the broker tool and creates a Safehouse Claude child     | Passed. The daemon port was refused for the Codex agent too.                                |
+| The plugin's notice wakes an idle sandboxed Codex creator                              | Passed. The creator read it as an agent message from the child.                             |
+| A sandboxed Claude agent creates a Safehouse Codex child                               | Passed when the request named `codex`. Failed when it named `safehouse-codex`.              |
 
-Not tested: a prompting caller or child, Codex and Pi as caller or child, a forged source from inside the sandbox, notice delivery after a plugin reload, a snapshot recorded at request time, the creation limits, and credential placement.
+Not tested: a prompting caller or child, Pi as caller or child, a Codex creator that is mid-turn, a forged source from inside the sandbox, notice delivery after a plugin reload, a snapshot recorded at request time, the creation limits, and credential placement.
+
+The Codex rows used Safehouse 0.13.0 and a workspace policy that grants read access to the folder holding the Codex install.
+Codex's server process keeps the directory the daemon was started from. A daemon started from a directory outside the session's access made every Codex launch fail before these rows could run.
 
 ## Feasibility gates and implementation order
 
@@ -180,7 +188,7 @@ Not tested: a prompting caller or child, Codex and Pi as caller or child, a forg
 2. Launch a child from a prompting caller. Show the child prompts, the request reaches the person, and no broker operation answers it.
 3. Persist pending completion notices. Reload the plugin while a child runs and show the creator still wakes once.
 4. Add session credentials, family records, creation limits, and the four operations. Reject forged identifiers, another session's credential, a revoked credential, an upward or sideways target, a model outside the variant's catalog, a provider this plugin does not own, a mode the child's provider lacks, and every excluded operation. Show that an agent whose policy enables `process-control` cannot obtain another session's credential.
-5. Repeat the probes on the beta target, with Codex as caller and as child, keeping a log for each row.
+5. Repeat the probes on the beta target, with Pi and with a Codex creator that is mid-turn, keeping a log for each row.
 6. Run a dispatching agent inside Safehouse through one complete dispatch: create, wait, wake, read, follow up.
 7. Add person-approved links between families, read only first.
 
