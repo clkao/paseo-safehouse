@@ -20,6 +20,7 @@ import {
   hash,
   macOnly,
   policyEnvironment,
+  policyRevision,
   prepareSnapshot,
   readJson,
   readSource,
@@ -302,8 +303,6 @@ export async function routeCreation(
     if (error instanceof Error && error.name === "SafehouseLaunchError") throw error;
     throw launchError(request.config.provider, error instanceof Error ? error.message : String(error));
   });
-  const raw = await recover(readSource(cwd));
-  if (!selected && choice !== true && raw === null) return request;
   macOnly();
   const provider = selected ? request.config.provider : variant(request.config.provider);
   const host = installed?.sources?.[provider]?.base ?? (selected ? native(provider) : request.config.provider);
@@ -370,16 +369,16 @@ export async function status(paseo: Paseo, workspaceId: string) {
   let error: string | null = null,
     raw: string | null = null,
     policy: ResolvedPolicy | null = null;
+  let policySource: "defaults" | "file" | null = null;
   let routing: boolean | null = null, routingError: string | null = null;
   try { routing = await routingChoice(cwd); } catch (e) { routingError = String(e); }
   try {
     raw = await readSource(cwd);
-    if (raw !== null && saved)
-      policy = await resolvePolicy(raw, cwd, saved.features);
+    policySource = raw === null ? "defaults" : "file";
+    if (saved) policy = await resolvePolicy(raw ?? "", cwd, saved.features);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
-  if (routing === true && raw === null && !error) error = "Workspace .safehouse is missing. Create or restore the policy, or disable automatic Safehouse.";
   const policyValid = !!policy;
   let configured = !!saved;
   if (saved) {
@@ -401,12 +400,10 @@ export async function status(paseo: Paseo, workspaceId: string) {
         : routing === false
           ? "off"
           : error
-        ? "invalid"
-        : raw === null
-          ? "absent"
-          : !configured
-            ? "setup"
-            : "ready";
+            ? "invalid"
+            : !configured
+              ? "setup"
+              : "ready";
   const { entries } = await paseo.agents.list();
   const agents = await Promise.all(
     entries
@@ -421,7 +418,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
           title: agent.title || agent.id,
           provider: agent.provider,
           digest: receipt?.digest ?? null,
-          changed: !!receipt && receipt.digest !== policy?.digest,
+          changed: !!receipt && !!policy && receipt.digest !== policy.digest,
           preparedAt: receipt?.preparedAt ?? null,
         };
       }),
@@ -431,9 +428,10 @@ export async function status(paseo: Paseo, workspaceId: string) {
     platform: process.platform,
     state,
     configured,
-    routingEnabled: routing ?? (raw !== null || error !== null),
+    routingEnabled: routing ?? true,
+    policySource,
     raw,
-    revision: hash(raw ?? ""),
+    revision: policyRevision(raw),
     digest: policy?.digest ?? null,
     policyValid,
     error: routingError ?? error,

@@ -1,7 +1,8 @@
 # Paseo Safehouse
 
 [Agent Safehouse](https://github.com/eugene1g/agent-safehouse) limits agent access to files through the native macOS sandbox, `sandbox-exec`.
-This plugin applies those limits to [Paseo](https://github.com/getpaseo/paseo) agents through a workspace’s `.safehouse` policy.
+This plugin applies those limits to new [Paseo](https://github.com/getpaseo/paseo) agents by default.
+An optional workspace `.safehouse` policy adds access.
 You keep the normal model picker and conversations.
 
 ## Install
@@ -18,20 +19,27 @@ Select **Refresh providers**.
 
 ## Use
 
-1. Open a workspace with a `.safehouse` policy. If no policy exists, create one in the **Safehouse** panel.
-2. Use the workspace header to enable or disable Safehouse for new agents.
-3. Select your usual provider and model.
-4. Start an agent.
+1. Select your workspace, provider, and model.
+2. Start an agent. Safehouse applies before the workspace header exists.
+3. Use the workspace header to enable or disable Safehouse for future agents.
+
+A saved Off choice permits ordinary launches. Without a saved choice, Safehouse is On.
+Without `.safehouse`, the workspace is writable and Safehouse supplies its built-in system, toolchain, network, temporary-directory, and harness access.
+Plugin protections still apply. No extra directory grants, optional capabilities, or custom profiles apply.
+Enabling Safehouse does not create a policy file.
 
 To change access:
 
 1. Open the **Safehouse** panel.
-2. Select **Review access**.
-3. Edit the policy.
+2. Edit the policy or add access in the fields.
+3. Select **Review access**.
 4. Select **Save policy**.
 5. Reload an existing Safehouse agent to apply the saved policy.
 
-The agent pill shows its Safehouse status. Reload preserves the conversation and provider.
+Saving a policy is optional. Invalid, unreadable, or symlinked policies block Safehouse launches.
+Repair a reported launch error and retry. Safehouse never retries outside the sandbox.
+
+The agent pill shows its prepared policy status. Reload preserves the conversation and provider.
 The workspace toggle does not change existing agents. Explicit Safehouse providers always use the sandbox.
 
 ## Access limits

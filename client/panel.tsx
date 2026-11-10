@@ -22,6 +22,7 @@ type Status = Awaited<
   >
 >;
 type Reviewed = {
+  revision: string;
   digest: string;
   raw: string;
   readOnly: string[];
@@ -46,6 +47,7 @@ export function SafehousePanel({
     [busy, setBusy] = useState(false);
   const [raw, setRaw] = useState(""),
     [revision, setRevision] = useState(""),
+    [source, setSource] = useState<Status["policySource"]>(null),
     [dirty, setDirty] = useState(false);
   const [draft, setDraft] = useState<Policy>(emptyPolicy),
     [reviewed, setReviewed] = useState<Reviewed | null>(null);
@@ -98,8 +100,13 @@ export function SafehousePanel({
     if (data && !dirty) {
       setRaw(data.raw ?? "");
       setRevision(data.revision);
+      setSource(data.policySource);
+      setDraft(emptyPolicy());
     }
-  }, [data?.revision, dirty]);
+  }, [data?.revision, data?.policySource, dirty]);
+  useEffect(() => {
+    if (reviewed && data && (reviewed.revision !== data.revision || data.policySource === null)) setReviewed(null);
+  }, [data?.revision, data?.policySource, reviewed]);
   async function action(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -200,17 +207,16 @@ export function SafehousePanel({
               <Text key={provider} selectable style={muted}>{provider}: {reason}</Text>
             ))}
           </View>
+          <Text style={muted}>
+            {data.policySource === "defaults"
+              ? "Safehouse defaults. No .safehouse file. The workspace is writable. Safehouse’s built-in access and plugin protections apply. Saving a policy is optional."
+              : data.policySource === null ? "Repair the workspace policy file before reviewing or saving access." : "The workspace .safehouse file supplies access."}
+            {data.routingEnabled ? " Safehouse is on for new agents by default." : " Automatic routing is off."}
+          </Text>
           {!data.configured ? (
             <Text style={text}>Refresh providers to configure Safehouse on this daemon.</Text>
           ) : (
             <>
-              <Text style={muted}>
-                {data.raw === null
-                  ? "Create a .safehouse policy to sandbox new agents in this workspace."
-                  : data.routingEnabled
-                    ? "New ordinary agents use the workspace .safehouse policy. Review access to inspect or edit it."
-                    : "Automatic routing is off. Use the workspace header menu to enable it."}
-              </Text>
               <Text style={muted}>
                 The workspace has read and write access. Additional grants
                 extend Safehouse’s built-in system, network, toolchain, and
@@ -220,7 +226,7 @@ export function SafehousePanel({
                 Codex uses Full Access automatically, with no Codex approval
                 prompts. Safehouse enforces the workspace policy.
               </Text>
-              {data.raw === null ? (
+              {source === null ? null : source === "defaults" ? (
                 <View style={{ gap: 14 }}>
                   {(["readOnly", "readWrite"] as const).map((kind) => (
                     <View key={kind} style={{ gap: 5 }}>
@@ -314,8 +320,7 @@ export function SafehousePanel({
               )}
               {dirty && data.revision !== revision ? (
                 <Text style={{ color: colors.statusDanger }}>
-                  The policy changed on disk. Reopen the panel before saving
-                  this draft.
+                  The policy changed on disk. Your draft is preserved. Review access again before saving.
                 </Text>
               ) : null}
               {button(
@@ -323,7 +328,7 @@ export function SafehousePanel({
                 () =>
                   void action(async () => {
                     const candidate =
-                      data.raw === null
+                      source === "defaults"
                         ? renderPolicy({
                             ...draft,
                             readOnly: draft.readOnly.filter((x) => x.trim()),
@@ -331,12 +336,15 @@ export function SafehousePanel({
                             profiles: draft.profiles.filter((x) => x.trim()),
                           })
                         : raw;
+                    setDirty(true);
+                    setRevision(data.revision);
                     const result = await preview({
                       workspaceId,
                       raw: candidate,
                     });
-                    setReviewed({ ...result, raw: candidate });
+                    setReviewed({ ...result, raw: candidate, revision: data.revision });
                   }),
+                data.policySource === null || source === null,
               )}
               {reviewed ? (
                 <View
@@ -384,17 +392,19 @@ export function SafehousePanel({
                         await save({
                           workspaceId,
                           raw: reviewed.raw,
-                          revision,
+                          revision: reviewed.revision,
                           digest: reviewed.digest,
                         });
                         setDirty(false);
                         setReviewed(null);
+                        const current = await refresh();
                         setMessage(
-                          data.routingEnabled
+                          current.routingEnabled
                             ? "Policy saved. New Safehouse agents use it. Reload an existing Safehouse agent to apply it there."
                             : "Policy saved. Automatic routing remains off. Explicit Safehouse agents use this policy; existing agents keep their provider.",
                         );
                       }),
+                    reviewed.revision !== data.revision || data.policySource === null,
                   )}
                 </View>
               ) : null}
@@ -412,7 +422,7 @@ export function SafehousePanel({
                         {agent.preparedAt
                           ? "Policy prepared " + agent.preparedAt
                           : "No policy preparation record"}
-                        {agent.changed ? " · workspace policy changed" : ""}
+                        {!data.policyValid ? " · current policy unavailable" : agent.changed ? " · workspace policy changed" : ""}
                       </Text>
                       {button(
                         "Reload " + agent.title,
