@@ -1,72 +1,50 @@
 # Paseo Safehouse
 
-Workspace access policies for Paseo agents on macOS.
+Run [Paseo](https://github.com/getpaseo/paseo) agents inside [Agent Safehouse](https://github.com/eugene1g/agent-safehouse) on macOS.
+Use a workspace’s `.safehouse` policy to control file access while keeping Paseo’s normal model picker and conversations.
 
-The plugin uses a workspace’s existing `.safehouse` policy automatically unless you disable automatic routing in the workspace header.
-Use Paseo’s normal provider picker to start sandboxed agents. Review access when you want to inspect or edit the policy.
-The workspace policy applies across supported providers while Paseo manages conversations, model selection, and resume.
+Beta candidate. Tested with Paseo 0.15.3 and Safehouse 0.12.0, using Pi, Claude, and Codex.
 
-**Status: beta candidate.**
+## Install
 
-The plugin targets clean installations on macOS. Provider and policy checks use Paseo 0.15.3 and Safehouse 0.12.0.
-See [implementation status](docs/implementation.md) for evidence and remaining acceptance checks.
+Install Paseo and Agent Safehouse on the daemon host, then install this plugin:
 
-## Workflow
+```sh
+paseo plugin install https://github.com/clkao/paseo-safehouse
+```
 
-1. Open a workspace that contains `.safehouse`.
-2. The candidate header shows **Safehouse On** when automatic routing is enabled and the workspace is ready.
-3. Select a provider and model, then start an agent.
-4. To inspect or change access, open **Safehouse**, choose **Review access**, and save edits with **Save policy**.
-5. To apply policy changes to an existing agent, reload that agent.
+Open the **Safehouse** panel and select **Refresh providers**.
+This beta targets clean installations. Older Safehouse plugins can have conflicting provider IDs.
 
-The panel can create `.safehouse` from directory grants and optional capabilities.
-The candidate header menu enables or disables automatic routing for new agents.
-The choice applies across clients until changed. It does not select the behavior of one draft.
-Explicit Safehouse providers remain sandboxed when automatic routing is off. Existing agents keep their providers.
-If automatic routing is enabled without a policy, new managed launches fail with a policy error.
-Per-draft controls remain a [future API opportunity](docs/design.md#future-upstream-api-opportunities).
+## Use
 
-Safehouse restricts the agent process and its children. The Paseo daemon remains outside that sandbox.
-Additional MCP services can provide access outside the sandbox and retain their own authority.
-Workspaces without a policy keep their ordinary launch behavior. Existing sessions retain their launch policy.
+1. Open a workspace with `.safehouse`, or create a policy in the **Safehouse** panel.
+2. Use the workspace header to turn automatic Safehouse routing on or off for new agents.
+3. Select your usual provider and model, then start an agent.
+4. To change access, select **Review access**, edit the policy, and select **Save policy**.
+5. Reload an existing Safehouse agent to apply the saved policy.
 
-## Platform and providers
+The agent pill shows its Safehouse status. Reload preserves the conversation and provider.
+The workspace toggle does not change existing agents. Explicit Safehouse providers always remain sandboxed.
 
-The daemon host must run macOS. Pi, Claude, and Codex passed initial live sandbox probes.
-The plugin selects Codex **Full Access** automatically for Safehouse launches.
-This disables Codex’s inner sandbox and approval prompts.
-Safehouse enforces the outer process boundary. Pi, Claude, and Codex passed conversation continuity and workspace isolation checks.
-Setup also wraps explicit command arrays for supported built-in adapters, their direct derivatives, and generic custom ACP providers.
-Arguments retain their literal values. Explicit provider environment reaches both sandboxed sessions and catalog discovery, except blocked launch-control variables. Unsupported configurations fail with an instruction to disable automatic routing.
-The failed launch never retries outside Safehouse. A later ordinary launch requires your explicit workspace choice.
-
-Model discovery runs in a separate Safehouse process with no workspace grants.
-Use the ordinary Pi provider in Paseo’s picker. It loads native model configuration before Safehouse routing.
-Native extensions also run inside the session sandbox. Their dependencies must be readable under the workspace policy.
-The explicit Safehouse variant’s restricted catalog can differ from the ordinary picker. No harness-specific panel settings are required.
-The [design](docs/design.md#provider-discovery) describes catalog extension configuration and its limits.
+Safehouse restricts the agent process and its children. The Paseo daemon and additional MCP services retain their own authority.
+Extensions that load files outside readable locations need explicit policy grants.
+Each launch or reload reads the policy again; protection across separate sessions is outside this beta’s scope.
+See the [design](docs/design.md) for boundary details and limitations.
 
 ## Development
 
-Development is managed by the [Spacedock dev workflow](docs/dev/README.md).
-The development agent runs outside Safehouse and uses an isolated daemon for sandboxed test agents.
-
-Beta acceptance targets Paseo 0.15.3 and Safehouse 0.12.0 on the daemon host.
-The manifest accepts Paseo >=0.15.0. Other accepted versions have not received the same runtime checks.
-Development uses SDK 0.14 lifecycle aliases. The isolated 0.15.3 runtime checks cover this integration.
+Use a separate Paseo daemon for tests.
 
 ```sh
 npm ci
 npm run typecheck
 npm test
-paseo plugin install "$PWD" --home /path/to/development-daemon-home
 ```
 
-Use a separate daemon for development. In the **Safehouse** panel, select **Refresh providers** before launching sandboxed agents.
-The action remains available after setup to add configured providers or refresh their commands and environment.
-The command center entry is **Configure or review Safehouse**.
-The macOS test runs real sandbox probes against temporary fixtures.
+The macOS tests require an installed Safehouse binary.
+See [implementation status](docs/implementation.md) and the [development workflow](docs/dev/README.md) for evidence and remaining acceptance checks.
 
-- [Design](docs/design.md): architecture, policy loading, lifecycle integration, and security boundary.
-- [Validation plan](docs/validation.md): feasibility gates and provider acceptance tests.
-- [Implementation status](docs/implementation.md): current work and evidence.
+## License
+
+[MIT](LICENSE)
