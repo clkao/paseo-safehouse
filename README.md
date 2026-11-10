@@ -43,18 +43,23 @@ Extensions need explicit policy grants to read dependencies outside the permitte
 Each session uses a fixed access policy. Each new launch or reload resolves the policy paths again.
 The [design](docs/design.md) explains the sandbox boundaries and limitations.
 
-## Connect an agent to the Paseo daemon
+## Paseo daemon access is an escape route
 
-Safehouse agents cannot connect to the configured Paseo daemon port or use the agent-side Paseo tools.
-A `.safehouse` grant cannot override these plugin restrictions.
+With standalone Agent Safehouse, `--add-dirs="$HOME/.paseo"` grants read and write access to the default Paseo daemon home.
+For example:
 
-For an agent that needs daemon access:
+```sh
+safehouse --add-dirs="$HOME/.paseo" -- paseo agent ls --home "$HOME/.paseo"
+```
 
-1. Turn Safehouse off in the workspace header.
-2. Start a new agent with an ordinary provider, such as `pi`, `claude`, or `codex`.
+For a separate daemon, replace both paths with its daemon home.
+The directory contains daemon configuration and local connection credentials.
+Daemon access is a sandbox escape route: an agent can ask Paseo to run commands or create agents outside its sandbox.
+Only grant this access to an agent that you trust with that authority.
 
-This new agent runs outside Safehouse.
-Reload does not remove the sandbox from an existing Safehouse agent.
+This standalone command does not override the Paseo Safehouse plugin's fixed restrictions.
+Plugin-managed agents cannot access the protected daemon home or connect to its configured port, even with an `add-dirs` grant.
+The plugin currently has no daemon-access opt-in.
 
 ## Development
 
