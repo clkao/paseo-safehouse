@@ -108,7 +108,7 @@ test("unmanaged workspaces retain ordinary provider selection without daemon cal
       assert.deepEqual(providerOptions, { sandbox_mode: "workspace-write", approval_policy: "on-request" });
     }
   }
-  assert.equal(variant("pi"), "pi-safehouse");
+  assert.equal(variant("pi"), "safehouse-pi");
 });
 
 test(
@@ -164,7 +164,7 @@ test(
     const plugins = { peer: { enabled: true } };
     const pluginsBefore = structuredClone(plugins);
     const requestedCatalogs: string[] = [];
-    const running = [{ agent: { id: "existing", workspaceId: "fixture", provider: "pi-safehouse", providerOptions: { keep: true } } }];
+    const running = [{ agent: { id: "existing", workspaceId: "fixture", provider: "safehouse-pi", providerOptions: { keep: true } } }];
     const runningBefore = JSON.stringify(running);
     const paseo = {
       workspaces: {
@@ -220,7 +220,7 @@ test(
         const result = await routeCreation({ config: {
           cwd: workspaces[0], provider, model: "fixture/model", mcpServers,
         } }, paseo);
-        assert.equal(result.config.provider, "pi-safehouse");
+        assert.equal(result.config.provider, "safehouse-pi");
         assert.equal(result.config.mcpServers, mcpServers);
         assert.deepEqual(result.config.mcpServers, { peer: { type: "http", url: "http://127.0.0.1:41800/mcp" } });
       }
@@ -526,19 +526,19 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   } as unknown as Parameters<typeof setup>[0];
   await setup(paseo);
   for (const id of Object.keys(originals)) assert.deepEqual(providers[id], originals[id]);
-  assert.equal(providers["custom-safehouse"].extends, "copilot");
-  assert.deepEqual(providers["custom-safehouse"].disallowedTools, ["custom-tool"]);
-  assert.deepEqual(providers["custom-safehouse"].models, originals.custom.models);
-  assert.equal(providers["generic-safehouse"].extends, "acp");
-  assert.equal(providers["plugin-safehouse"], undefined);
+  assert.equal(providers["safehouse-custom"].extends, "copilot");
+  assert.deepEqual(providers["safehouse-custom"].disallowedTools, ["custom-tool"]);
+  assert.deepEqual(providers["safehouse-custom"].models, originals.custom.models);
+  assert.equal(providers["safehouse-generic"].extends, "acp");
+  assert.equal(providers["safehouse-plugin"], undefined);
   await fs.writeFile(path.join(base, ".safehouse"), "");
   const request = { config: { cwd: base, provider: "custom", model: "fixture", modeId: "auto", providerOptions: { own: true } } };
   const modelLess = await routeCreation({ config: { cwd: base, provider: "generic" } }, paseo);
-  assert.equal(modelLess.config.provider, "generic-safehouse");
+  assert.equal(modelLess.config.provider, "safehouse-generic");
   assert.equal(modelLess.config.model, undefined);
   assert.match((await status(paseo, "fixture")).unavailable.plugin, /identity/);
   const result = await routeCreation(request, paseo);
-  assert.equal(result.config.provider, "custom-safehouse");
+  assert.equal(result.config.provider, "safehouse-custom");
   assert.deepEqual(result.config.providerOptions, { own: true });
   assert.equal(result.config.modeId, "auto");
   await assert.rejects(routeCreation({ config: { ...request.config, provider: "plugin" } }, paseo), /Disable automatic Safehouse/);
@@ -549,7 +549,7 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   await fs.writeFile(path.join(base, ".safehouse"), "invalid=setting");
   await assert.rejects(routeCreation(request, paseo), /unsupported setting.*Disable automatic Safehouse/);
   await fs.rm(path.join(base, ".safehouse"));
-  await assert.rejects(routeCreation({ config: { ...request.config, provider: "custom-safehouse" } }, paseo), /launching or resuming.*Disable automatic Safehouse/);
+  await assert.rejects(routeCreation({ config: { ...request.config, provider: "safehouse-custom" } }, paseo), /launching or resuming.*Disable automatic Safehouse/);
   await fs.writeFile(path.join(base, ".safehouse"), "");
   providers.copilot.env.BASE = "changed";
   await assert.rejects(routeCreation(request, paseo), /Refresh providers/);

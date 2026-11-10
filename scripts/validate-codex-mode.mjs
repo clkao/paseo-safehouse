@@ -65,7 +65,7 @@ try {
     title: `${path.basename(cwd)} · Codex · automatic Safehouse mode`,
     providerOptions,
   });
-  assert.equal(agent.provider, "codex-safehouse");
+  assert.equal(agent.provider, "safehouse-codex");
   assert.equal(agent.currentModeId, "full-access");
   console.log(
     JSON.stringify({
@@ -158,7 +158,7 @@ try {
         assert.equal((await rpc("status", { workspaceId })).routingEnabled, false);
         const unchanged = (await client.fetchAgent(agent.id)).agent;
         assert.equal(unchanged.id, agent.id);
-        assert.equal(unchanged.provider, "codex-safehouse");
+        assert.equal(unchanged.provider, "safehouse-codex");
         for (const [pid] of server) process.kill(Number(pid), 0);
         evidence.routing = { disabled: true, processContinued: true };
       }
@@ -175,7 +175,7 @@ try {
     await rpc("set-workspace-routing", { workspaceId, enabled: true });
     assert.equal((await rpc("status", { workspaceId })).routingEnabled, true);
     const next = await client.createAgent({ workspaceId, cwd, provider: "codex", model: "gpt-5.4", title: "Safehouse re-enabled fixture", providerOptions });
-    assert.equal(next.provider, "codex-safehouse");
+    assert.equal(next.provider, "safehouse-codex");
     assert.equal(next.currentModeId, "full-access");
     evidence.routing.reenabledAgentId = next.id;
   }

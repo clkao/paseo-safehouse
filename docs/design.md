@@ -80,7 +80,9 @@ Ordinary provider selection
 
 ### Provider configuration
 
-The plugin adds variants such as `pi-safehouse`, with `extends: "pi"` and a command array of this form:
+Generated IDs use `safehouse-{source}`. Setup skips these IDs and legacy `*-safehouse` or `*-safehouse-direct` aliases to prevent nested wrappers. Existing entries remain unchanged; an occupied unowned target causes setup to fail.
+
+The plugin adds variants such as `safehouse-pi`, with `extends: "pi"` and a command array of this form:
 
 ```json
 ["/bin/sh", "/protected/launchers/pi-<content-hash>.sh"]

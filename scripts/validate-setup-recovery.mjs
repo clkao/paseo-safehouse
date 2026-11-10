@@ -39,23 +39,23 @@ try {
     const installation = path.join(home, 'safehouse/installation.json');
     const old = JSON.parse(await fs.readFile(installation, 'utf8'));
     const before = (await api.config.get()).config.providers;
-    const files = [old.guard, old.entries['probe-safehouse'].command[1]];
+    const files = [old.guard, old.entries['safehouse-probe'].command[1]];
     const bytes = await Promise.all(files.map(file => fs.readFile(file, 'utf8')));
     await api.config.patch({removeProviders:['probe']});
     await setup(api); await setup(api);
     const retired = JSON.parse(await fs.readFile(installation, 'utf8'));
-    assert.deepEqual(retired.entries['probe-safehouse'], old.entries['probe-safehouse']);
+    assert.deepEqual(retired.entries['safehouse-probe'], old.entries['safehouse-probe']);
     assert.ok(retired.unavailable.probe);
     const current = (await api.config.get()).config.providers;
     for (const [id, entry] of Object.entries(before)) if (id !== 'probe') assert.deepEqual(current[id], entry);
     assert.deepEqual(await Promise.all(files.map(file => fs.readFile(file, 'utf8'))), bytes);
     await fs.writeFile(path.join(cwd, '.safehouse'), '');
     const opening = provider => ({provider, cwd, agentId:'recovery-retirement-probe', reason:'resume', workspaceId:null, purpose:'interactive', title:null, labels:{}, env:{}, tools:[], mcpServers:{}});
-    await assert.rejects(prepareOpening(opening('probe-safehouse'), api), /unavailable/);
-    assert.ok((await prepareOpening(opening('pi-safehouse'), api)).env.SAFEHOUSE_WORKDIR);
+    await assert.rejects(prepareOpening(opening('safehouse-probe'), api), /unavailable/);
+    assert.ok((await prepareOpening(opening('safehouse-pi'), api)).env.SAFEHOUSE_WORKDIR);
     await assert.rejects(fs.access(path.join(home, 'safehouse/setup-pending.json')));
     await api.config.patch({providers:{probe:before.probe}}); await setup(api);
-    assert.ok((await prepareOpening(opening('probe-safehouse'), api)).env.SAFEHOUSE_WORKDIR);
+    assert.ok((await prepareOpening(opening('safehouse-probe'), api)).env.SAFEHOUSE_WORKDIR);
     console.log(JSON.stringify({phase,retained:true,healthyReopenPrepared:true,inactiveReopen:'rejected',restoredReopenPrepared:true,hashes:bytes.map(hash)}));
   } else {
     const pending = JSON.parse(await fs.readFile(path.join(home,'safehouse/setup-pending.json'),'utf8'));
@@ -69,7 +69,7 @@ try {
     await assert.rejects(fs.access(path.join(home,'safehouse/setup-pending.json')));
     for(const f of pending.files) assert.equal(await fs.readFile(f.file,'utf8'),f.text);
     const snapshot = await prepareSnapshot(path.join(home,'safehouse'),await resolvePolicy('',cwd,[]));
-    const command = saved.entries['probe-safehouse'].command;
+    const command = saved.entries['safehouse-probe'].command;
     const sandbox = JSON.parse((await run(command[0],command.slice(1),{cwd,env:policyEnvironment(process.env,snapshot),timeout:45000})).stdout);
     assert.deepEqual(sandbox,{write:'allowed',read:'ok',sibling:'EPERM',siblingWrite:'EPERM'});
     const direct = JSON.parse((await run(process.execPath,['-e',code],{cwd})).stdout);

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { setup, status, prepareOpening } from "../server/service";
+import { setup, status, prepareOpening, routeCreation } from "../server/service";
 import { run } from "../server/policy";
 
 // Paseo 0.15.3 recursively merges objects, replacing arrays and scalar values.
@@ -56,8 +56,8 @@ await setup({config:{get:async()=>({config:JSON.parse(await fs.readFile(file,'ut
   await run(process.execPath, ["--import", "tsx", retry], { cwd: process.cwd(), env: process.env });
   const saved = JSON.parse(await fs.readFile(path.join(f.root, "installation.json"), "utf8"));
   const current = await f.get();
-  assert.deepEqual(current.providers["pi-safehouse"], saved.entries["pi-safehouse"]);
-  assert.equal(current.providers["pi-safehouse"].paseoTools.enabled, false);
+  assert.deepEqual(current.providers["safehouse-pi"], saved.entries["safehouse-pi"]);
+  assert.equal(current.providers["safehouse-pi"].paseoTools.enabled, false);
   assert.equal(current.providers.pi.paseoTools.enabled, true);
   assert.deepEqual(current.providers.pi, f.initial.providers.pi);
   assert.deepEqual(current.providers.peer, f.initial.providers.peer);
@@ -137,7 +137,7 @@ for (const boundary of ["patch", "files", "commit", "cleanup"]) {
     assert.deepEqual(await Promise.all(retained.map(file => fs.readFile(file, "utf8"))), bytes);
     await setup(f.host);
     const saved = JSON.parse(await fs.readFile(path.join(f.root, "installation.json"), "utf8"));
-    assert.deepEqual((await f.get()).providers["pi-safehouse"], saved.entries["pi-safehouse"]);
+    assert.deepEqual((await f.get()).providers["safehouse-pi"], saved.entries["safehouse-pi"]);
     assert.deepEqual(await Promise.all(retained.map(file => fs.readFile(file, "utf8"))), bytes);
   });
 }
@@ -178,7 +178,7 @@ for (const conflict of ["target", "source", "identity", "malformed", "foreign", 
       f.host.config.patch = async patch => { await apply(patch); throw new Error("lost response"); };
       await assert.rejects(setup(f.host), /lost response/);
       if (conflict === "target" || conflict === "source") {
-        const config = await f.get(); config.providers[conflict === "target" ? "pi-safehouse" : "pi"].env.USER_OPTION = "edited";
+        const config = await f.get(); config.providers[conflict === "target" ? "safehouse-pi" : "pi"].env.USER_OPTION = "edited";
         await fs.writeFile(f.configFile, JSON.stringify(config));
       }
       if (conflict === "identity") {
@@ -193,7 +193,7 @@ for (const conflict of ["target", "source", "identity", "malformed", "foreign", 
     if (conflict === "readback") {
       // Exact planned targets require no patch; a changed final read must still prevent commit.
       const get = f.host.config.get; let reads = 0;
-      f.host.config.get = async (...args) => { const result = await get(...args); if (++reads === 3) result.config.providers["pi-safehouse"].label = "unexpected"; return result; };
+      f.host.config.get = async (...args) => { const result = await get(...args); if (++reads === 3) result.config.providers["safehouse-pi"].label = "unexpected"; return result; };
     }
     await assert.rejects(setup(f.host), /conflict|source changed|identity changed|Invalid setup-pending|another configuration|nested field removal/);
     assert.equal(f.patches(), count);
@@ -249,7 +249,7 @@ for (const change of ["removed", "unwrappable"]) {
     await setup(f.host);
     const installation = path.join(f.root, "installation.json");
     const old = JSON.parse(await fs.readFile(installation, "utf8"));
-    const files = [old.guard, old.entries["custom-safehouse"].command[1]];
+    const files = [old.guard, old.entries["safehouse-custom"].command[1]];
     const bytes = await Promise.all(files.map(file => fs.readFile(file, "utf8")));
     const changed = await f.get();
     if (change === "removed") delete changed.providers.custom;
@@ -257,19 +257,19 @@ for (const change of ["removed", "unwrappable"]) {
     await fs.writeFile(f.configFile, JSON.stringify(changed));
     await setup(f.host); await setup(f.host);
     const retired = JSON.parse(await fs.readFile(installation, "utf8"));
-    assert.deepEqual(retired.entries["custom-safehouse"], old.entries["custom-safehouse"]);
+    assert.deepEqual(retired.entries["safehouse-custom"], old.entries["safehouse-custom"]);
     assert.ok(retired.unavailable.custom);
-    assert.deepEqual(retired.sources["custom-safehouse"].source, changed.providers.custom ?? null);
+    assert.deepEqual(retired.sources["safehouse-custom"].source, changed.providers.custom ?? null);
     assert.deepEqual(await Promise.all(files.map(file => fs.readFile(file, "utf8"))), bytes);
     assert.deepEqual((await f.get()).providers.pi, changed.providers.pi);
     assert.deepEqual((await f.get()).providers.peer, changed.providers.peer);
     assert.equal((await status(f.host, "workspace")).configured, true);
     const opening = (provider: string) => ({ provider, cwd: f.dir, agentId: "resume", reason: "resume", workspaceId: null, purpose: "interactive", title: null, labels: {}, env: {}, tools: [], mcpServers: {} }) as Parameters<typeof prepareOpening>[0];
-    await assert.rejects(prepareOpening(opening("custom-safehouse"), f.host), /unavailable/);
-    assert.ok((await prepareOpening(opening("pi-safehouse"), f.host)).env.SAFEHOUSE_WORKDIR);
+    await assert.rejects(prepareOpening(opening("safehouse-custom"), f.host), /unavailable/);
+    assert.ok((await prepareOpening(opening("safehouse-pi"), f.host)).env.SAFEHOUSE_WORKDIR);
     await assert.rejects(fs.access(path.join(f.root, "setup-pending.json")), { code: "ENOENT" });
     const coherent = await f.get(), edited = structuredClone(coherent);
-    edited.providers["custom-safehouse"].label = "Foreign edit";
+    edited.providers["safehouse-custom"].label = "Foreign edit";
     await fs.writeFile(f.configFile, JSON.stringify(edited));
     const count = f.patches(); await assert.rejects(setup(f.host), /another configuration/);
     assert.equal(f.patches(), count);
@@ -277,13 +277,13 @@ for (const change of ["removed", "unwrappable"]) {
     const restored = await f.get(); restored.providers.custom = custom;
     await fs.writeFile(f.configFile, JSON.stringify(restored)); await setup(f.host);
     assert.equal(JSON.parse(await fs.readFile(installation, "utf8")).unavailable.custom, undefined);
-    assert.ok((await prepareOpening(opening("custom-safehouse"), f.host)).env.SAFEHOUSE_WORKDIR);
-    const removed = await f.get(); delete removed.providers.custom; delete removed.providers["custom-safehouse"];
+    assert.ok((await prepareOpening(opening("safehouse-custom"), f.host)).env.SAFEHOUSE_WORKDIR);
+    const removed = await f.get(); delete removed.providers.custom; delete removed.providers["safehouse-custom"];
     await fs.writeFile(f.configFile, JSON.stringify(removed)); await setup(f.host);
     const dropped = JSON.parse(await fs.readFile(installation, "utf8"));
-    assert.equal(dropped.entries["custom-safehouse"], undefined);
-    assert.equal(dropped.sources["custom-safehouse"], undefined);
-    assert.equal((await f.get()).providers["custom-safehouse"], undefined);
+    assert.equal(dropped.entries["safehouse-custom"], undefined);
+    assert.equal(dropped.sources["safehouse-custom"], undefined);
+    assert.equal((await f.get()).providers["safehouse-custom"], undefined);
     assert.deepEqual(await Promise.all(files.map(file => fs.readFile(file, "utf8"))), bytes);
   });
 }
@@ -295,8 +295,8 @@ test("refresh retains only stale reserved empty masks and rejects real env delet
   await setup(f.host); delete process.env[name];
   const changed = await f.get(); changed.providers.pi.label = "Updated Pi";
   await fs.writeFile(f.configFile, JSON.stringify(changed)); await setup(f.host);
-  assert.equal((await f.get()).providers["pi-safehouse"].env[name], "");
-  assert.equal((await f.get()).providers["pi-safehouse"].label, "Pi · Safehouse");
+  assert.equal((await f.get()).providers["safehouse-pi"].env[name], "");
+  assert.equal((await f.get()).providers["safehouse-pi"].label, "Pi · Safehouse");
   const withEmpty = await f.get(); withEmpty.providers.pi.env.USER_EMPTY = "";
   await fs.writeFile(f.configFile, JSON.stringify(withEmpty)); await setup(f.host);
   const removed = await f.get(); delete removed.providers.pi.env.USER_EMPTY;
@@ -304,4 +304,35 @@ test("refresh retains only stale reserved empty masks and rejects real env delet
   const before = f.patches(); await assert.rejects(setup(f.host), /nested field removal/);
   assert.equal(f.patches(), before);
   await assert.rejects(fs.access(path.join(f.root, "setup-pending.json")), { code: "ENOENT" });
+});
+
+test("prefixed setup preserves aliases, avoids nesting, and routes new agents", { skip: process.platform !== "darwin" }, async t => {
+  const f = await fixture(t), before = await f.get();
+  const aliases = ["safehouse-external", "pi-safehouse", "pi-safehouse-direct"];
+  for (const id of aliases) before.providers[id] = { extends: "pi", command: ["pi"], label: id };
+  before.providers.custom = { extends: "pi", command: ["pi"] };
+  await fs.writeFile(f.configFile, JSON.stringify(before));
+  const sessions = aliases.map(provider => ({ provider, id: provider }));
+  const originalSessions = structuredClone(sessions);
+  Object.assign(f.host, { agents: { list: async () => ({ entries: sessions.map(agent => ({ agent })) }) } });
+  await setup(f.host); await setup(f.host);
+  const after = await f.get();
+  for (const [id, entry] of Object.entries(before.providers)) assert.deepEqual(after.providers[id], entry);
+  for (const id of aliases) assert.equal(after.providers[`safehouse-${id}`], undefined);
+  assert.ok(after.providers["safehouse-pi"]);
+  assert.ok(after.providers["safehouse-custom"]);
+  assert.equal(after.providers["safehouse-safehouse-pi"], undefined);
+  assert.deepEqual(sessions, originalSessions);
+  await fs.writeFile(path.join(f.dir, ".safehouse"), "");
+  for (const provider of ["pi", "custom"])
+    assert.equal((await routeCreation({ config: { provider, cwd: f.dir, model: "native" } }, f.host)).config.provider, `safehouse-${provider}`);
+});
+
+test("prefixed setup refuses an unowned occupied target without writing", { skip: process.platform !== "darwin" }, async t => {
+  const f = await fixture(t), before = await f.get();
+  before.providers["safehouse-pi"] = { extends: "pi", command: ["pi"], label: "Unowned" };
+  await fs.writeFile(f.configFile, JSON.stringify(before));
+  await assert.rejects(setup(f.host), /Provider safehouse-pi belongs to another configuration/);
+  assert.equal(f.patches(), 0);
+  assert.deepEqual(await f.get(), before);
 });

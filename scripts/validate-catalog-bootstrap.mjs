@@ -84,14 +84,14 @@ async function collect(id, phase) {
 try {
   await client.connect();
   for (const provider of [
-    "pi-safehouse",
-    "claude-safehouse",
-    "codex-safehouse",
+    "safehouse-pi",
+    "safehouse-claude",
+    "safehouse-codex",
   ]) {
     const catalog = await client.listProviderModels(provider, { cwd });
     assert.equal(catalog.error, null, provider);
     assert.ok(catalog.models.length, provider);
-    if (provider === "pi-safehouse")
+    if (provider === "safehouse-pi")
       assert.ok(catalog.models.some((m) => m.id === model));
     evidence.catalogs[provider] = catalog.models.length;
   }
@@ -104,7 +104,7 @@ try {
     title: "ASR · Pi DeepSeek · catalog bootstrap validation",
   });
   evidence.agentId = agent.id;
-  assert.equal(agent.provider, "pi-safehouse");
+  assert.equal(agent.provider, "safehouse-pi");
   fs.writeFileSync(
     ".local/catalog-bootstrap-agent.json",
     JSON.stringify(agent, null, 2),

@@ -33,7 +33,7 @@ import {
 type Paseo = PluginHandlerContext["paseo"];
 export const PLUGIN_ID = "paseo-safehouse";
 export const HOSTS = ["pi", "claude", "codex"] as const;
-export const variant = (provider: string) => `${provider}-safehouse`;
+export const variant = (provider: string) => `safehouse-${provider}`;
 export const native = (provider: string) =>
   HOSTS.find((host) => variant(host) === provider);
 export const daemonHome = () =>
@@ -160,7 +160,7 @@ async function setupLocked(
     await fs.realpath(process.execPath),
   ];
   for (const host of new Set([...HOSTS, ...Object.keys(current), ...Object.values(old?.sources ?? {}).map(source => source.provider)])) {
-    if (old?.entries[host]) continue;
+    if (old?.entries[host] || host.startsWith("safehouse-") || /-safehouse(?:-direct)?$/.test(host)) continue;
     let resolved;
     try { resolved = await configuredProvider(host, current); }
     catch (e) { unavailable[host] = e instanceof Error ? e.message : String(e); continue; }
