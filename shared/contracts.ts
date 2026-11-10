@@ -10,6 +10,9 @@ export const statusRpc = defineRpc({
     state: z.enum(["unsupported", "setup", "absent", "invalid", "ready", "off"]),
     configured: z.boolean(),
     routingEnabled: z.boolean(),
+    daemonAccess: z.boolean(),
+    daemonAccessRevision: z.string(),
+    daemonHome: z.string(),
     raw: z.string().nullable(),
     policySource: z.enum(["defaults", "file"]).nullable(),
     revision: z.string(),
@@ -25,6 +28,7 @@ export const statusRpc = defineRpc({
         provider: z.string(),
         digest: z.string().nullable(),
         changed: z.boolean(),
+        daemonAccess: z.boolean().nullable(),
         preparedAt: z.string().nullable(),
       }),
     ),
@@ -34,6 +38,11 @@ export const routingRpc = defineRpc({
   name: "safehouse.set-workspace-routing",
   input: workspace.extend({ enabled: z.boolean() }),
   output: z.object({ enabled: z.boolean() }),
+});
+export const daemonAccessRpc = defineRpc({
+  name: "safehouse.set-daemon-access",
+  input: workspace.extend({ enabled: z.boolean(), revision: z.string() }),
+  output: z.object({ enabled: z.boolean(), revision: z.string() }),
 });
 export const setupRpc = defineRpc({
   name: "safehouse.setup",

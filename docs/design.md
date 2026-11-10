@@ -100,7 +100,8 @@ The generated bootstrap quotes each configured command element literally, then a
 Session environment selects the protected policy snapshot.
 Setup collects valid environment names explicitly configured on the source and its base provider.
 Both bootstrap branches pass these names through Safehouse. The bootstrap contains names, not environment values.
-Policy, daemon, loader, Node and shell-control variables remain blocked. Unlisted daemon variables retain Safehouse’s default sanitization.
+Policy, loader, Node and shell-control variables remain blocked.
+The plugin supplies the captured daemon home through `PASEO_HOME` and passes it explicitly through Safehouse. Other `PASEO_*` variables remain masked. Unlisted daemon variables retain Safehouse’s default sanitization.
 Ordinary provider configuration remains intact. Installation rejects collisions with unrelated provider entries.
 Explicit command arrays support built-in factories and direct derivatives of those factories.
 A derived variant extends the same built-in and retains source overrides, including native environment and tool-restriction inheritance.
@@ -167,7 +168,8 @@ Each snapshot contains canonical grants and copies of custom profiles.
 The harness retains the actual workspace as its process directory.
 
 The plugin removes inherited policy overrides from session environment and applies its own values.
-Fixed final restrictions protect plugin state, snapshots, plugin code, and the daemon’s local endpoints.
+Fixed final restrictions protect plugin state, snapshots, and plugin code.
+Off snapshots also restrict daemon homes and captured local endpoints.
 Changing a source file after preparation cannot change the prepared snapshot.
 The opening hook resolves the source again before preparing the snapshot. Later source changes affect only subsequent processes.
 
@@ -185,6 +187,26 @@ The snapshot denies the managed process writes to `.safehouse` and to each resol
 It does not stop the process from changing other files, links, or folders it can write, so a later launch or reload at the same paths can resolve to a different policy or grant.
 That includes a link or folder on the way to a grant or profile, a granted file, the workspace folder itself, and a symbolic link through which the workspace was opened.
 A later launch uses whatever the paths lead to then.
+
+### Workspace daemon access
+
+The panel stores **Allow Paseo daemon access** in `safehouse/workspaces/<canonical-cwd-hash>.daemon-access.json`.
+The protected record contains `cwd` and `enabled`. A missing record means Off; an invalid or unreadable record blocks launch.
+A separate save serializes revision checks and atomic replacement per workspace within the plugin process.
+This save does not modify the policy source or routing record. Stale saves retain the client draft.
+
+Each opening captures the choice, active home, default home, and their available local TCP ports.
+The effective preparation digest includes that capture and the policy digest. Receipts record the prepared choice.
+Older receipts show unknown access and require reload. Saving does not change existing snapshots.
+On adds a writable grant for the canonical active home. It omits the daemon restrictions.
+Off appends daemon restrictions after custom profiles. Unconditional protection still covers plugin state, code, executables, policy sources, and snapshots.
+Catalog discovery always uses its fixed Off guard. Existing installations require **Refresh providers** before an On launch.
+
+The active installation must use loopback TCP. Port restrictions cover IPv4, IPv6, and hostname aliases through the existing `*:port` matcher.
+The matcher can also block remote hosts on the same port. Unix sockets beneath the protected homes remain denied with Off.
+Endpoint changes require fresh preparation. This mechanism does not monitor network changes in running processes.
+Remote, proxy, relay, other service routes, and previously delegated work remain outside this direct-process boundary.
+On permits sandbox escape through the daemon. It does not override restrictive user profiles or enable the native Paseo tool bridge.
 
 ### Provider discovery
 
@@ -241,7 +263,8 @@ Safehouse restricts the harness process and its children. The Paseo daemon remai
 Daemon-side tools, MCP services, and external services have separate authority.
 Explicit creation MCP maps and hook-local MCP maps and tools pass through unchanged.
 Wrapped providers set `paseoTools.enabled: false` to disable the separate agent-side Paseo control bridge.
-The sandbox protects daemon state and control ports. The daemon and plugin host remain trusted.
+Off snapshots protect daemon homes and captured control ports. On grants direct CLI/API access with whole-daemon authority.
+The daemon and plugin host remain trusted.
 Additional MCP services can provide access outside the process sandbox. Users must consider each service's authority.
 Other enabled plugins are not prohibited.
 Harness-native services and enabled credentials retain their own authority.

@@ -54,7 +54,7 @@ Acceptance requires:
 2. A process trace that shows the bootstrap replacing itself with Safehouse and the native harness.
 3. Successful chat and a real tool call in the workspace.
 4. Successful workspace reads and writes, with denied access to an ungranted sibling fixture.
-5. Denied access to daemon endpoints, protected plugin state, and policy snapshots.
+5. Denied daemon access with Off; successful CLI/API access with On. Protected plugin state and policy snapshots remain denied in both states.
 6. Source policy bytes preserved unless the user edits access.
 7. A native resume that retains a conversation marker and repeats the sandbox checks.
 8. An independent conversation that remains available throughout the test.
@@ -91,3 +91,27 @@ The `retire` phase checks provider removal and restoration.
 Keep workspace fixtures outside the plugin source and daemon home.
 Disable dictation and voice mode in test daemons to avoid speech-model downloads.
 Store local daemon details and test results in task records, not in this guide.
+
+## Daemon-access acceptance
+
+`test/daemon-access.test.ts` exercises saved choices and generated launchers with real macOS sockets.
+It covers concurrent stale saves, workspace isolation, unchanged policy/routing, snapshot retention, protected writes, and catalog restrictions.
+IPv4, IPv6, hostname, and explicitly permitted Unix sockets must fail with Off and succeed with On.
+Native Safehouse provides the independent transport controls.
+
+Use a clean isolated Paseo 0.15.3 daemon for the CLI/API and conversation checks.
+Keep its home under the ignored `.local/daemon` directory, outside the installed plugin source directory.
+Use a disposable plugin copy and workspace when those paths otherwise overlap.
+
+1. Capture a conversation marker and the agent ID, provider, and routing choice.
+2. In the panel, keep an unsaved policy draft while saving daemon access On.
+3. Check the authority warning, stale-save rejection, and distinct saved/prepared states.
+4. Refresh older providers, then reload the same agent.
+5. Run `paseo agent ls` with no home grant in `.safehouse` and no existing `cli-client-id`.
+6. Save Off, reload, and attempt explicit-address access with a separate writable CLI cache.
+7. Check continued workspace I/O, conversation recall, unchanged identity, and protected-state denial.
+8. Keep another workspace Off throughout the exercise.
+
+The direct-address case must fail at the network boundary, not merely during credential discovery.
+Neither state exposes built-in Paseo tools. Existing third-party tools retain their separate authority.
+Subprocess checks do not establish the rendered panel or conversation experience.

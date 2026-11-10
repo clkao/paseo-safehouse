@@ -74,6 +74,7 @@ export function providerEnvironmentNames(names: string[]) {
 export function policyEnvironment(
   input: Record<string, string | undefined>,
   workdir: string,
+  daemonHome = "",
 ): Record<string, string> {
   const result: Record<string, string> = {};
   // Empty values mask daemon inheritance in adapters that merge environments.
@@ -87,6 +88,7 @@ export function policyEnvironment(
   }
   return {
     ...result,
+    PASEO_HOME: daemonHome,
     SAFEHOUSE_WORKDIR: workdir,
     SAFEHOUSE_ADD_DIRS: "",
     SAFEHOUSE_ADD_DIRS_RO: "",
@@ -215,7 +217,7 @@ export function guardProfile(
     ].join("\n") + "\n"
   );
 }
-export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
+export async function prepareSnapshot(root: string, policy: ResolvedPolicy, daemonGuard = "") {
   policyPath(root);
   policyPath(policy.cwd);
   for (const p of [...policy.readOnly, ...policy.readWrite]) policyPath(p);
@@ -249,6 +251,11 @@ export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
       ),
     );
     lines.push(`append-profile=${guard}`);
+    if (daemonGuard) {
+      const file = policyPath(path.join(dir, "daemon.sb"));
+      await atomicWrite(file, daemonGuard);
+      lines.push(`append-profile=${file}`);
+    }
     await atomicWrite(path.join(dir, ".safehouse"), lines.join("\n") + "\n");
     return dir;
   } catch (error) {

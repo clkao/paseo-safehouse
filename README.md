@@ -53,21 +53,28 @@ The [design](docs/design.md) explains the sandbox boundaries and limitations.
 
 ## Paseo daemon access is an escape route
 
-With standalone Agent Safehouse, `--add-dirs="$HOME/.paseo"` grants read and write access to the default Paseo daemon home.
-For example:
+**Allow Paseo daemon access** defaults to Off for each workspace.
+On grants CLI/API access to the local daemon after launch or reload.
+Daemon authority is all-or-none. It is not limited to this workspace or one child agent.
+The daemon can operate other workspaces and agents and execute outside this sandbox.
+Only allow access when you intend to give the agent that authority.
 
-```sh
-safehouse --add-dirs="$HOME/.paseo" -- paseo agent ls --home "$HOME/.paseo"
-```
+1. Open the **Safehouse** panel.
+2. For an existing installation, select **Refresh providers** once.
+3. Select **Allow Paseo daemon access**.
+4. Select **Save daemon access**.
+5. Reload the selected Safehouse agent.
+6. Ask the agent to run `paseo agent ls`.
 
-For a separate daemon, replace both paths with its daemon home.
-The directory contains daemon configuration and local connection credentials.
-Daemon access is a sandbox escape route: an agent can ask Paseo to run commands or create agents outside its sandbox.
-Only grant this access to an agent that you trust with that authority.
+The plugin supplies `PASEO_HOME` for the active daemon. The panel shows its path and an explicit `--home` diagnostic command.
+Native Paseo tools stay disabled. On enables direct CLI/API access.
+Saving leaves the policy editor, `.safehouse`, automatic routing, provider, and conversation unchanged.
+The panel shows each agent's prepared choice. A different saved choice requires reload.
 
-This standalone command does not override the Paseo Safehouse plugin's fixed restrictions.
-Plugin-managed agents cannot access the protected daemon home or connect to its configured port, even with an `add-dirs` grant.
-The plugin currently has no daemon-access opt-in.
+Off blocks direct access to captured local daemon endpoints and daemon homes, even with explicit directory grants.
+It does not revoke work already delegated to the daemon. Other services and proxy/relay routes can retain authority.
+Running processes and detached descendants keep their prepared access until replaced.
+Custom profiles can still restrict access with On.
 
 ## Development
 

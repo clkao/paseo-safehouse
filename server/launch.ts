@@ -8,6 +8,7 @@ export function renderBootstrap(input: {
   root: string;
   binary: string;
   guard: string;
+  catalogGuard?: string;
   executable?: string;
   command?: string[];
   host: string;
@@ -19,7 +20,7 @@ export function renderBootstrap(input: {
   if (!command.length || command.some((arg) => typeof arg !== "string" || arg.includes("\0")) || !command[0])
     throw new Error("Safehouse requires a nonempty literal command array.");
   const argv = command.map(quote).join(" ");
-  const names = providerEnvironmentNames(input.envPass ?? []);
+  const names = [...providerEnvironmentNames(input.envPass ?? []), "PASEO_HOME"];
   const environment = names.length ? ` --env-pass=${quote(names.join(","))}` : "";
   const snapshots = path.join(root, "snapshots");
   const catalogArgs =
@@ -39,7 +40,7 @@ if [ "\${SAFEHOUSE_WORKDIR-}" = ${quote(path.join(root, "catalog"))} ]; then
   # Catalog discovery has no workspace policy or session-opening hook.
   cd /
   export SAFEHOUSE_WORKDIR=''
-  exec ${quote(binary)}${environment} --workdir '' --append-profile ${quote(guard)} -- ${argv}${catalogArgs} "$@"
+  exec ${quote(binary)}${environment} --workdir '' --append-profile ${quote(input.catalogGuard ?? guard)} -- ${argv}${catalogArgs} "$@"
 fi
 case "\${SAFEHOUSE_WORKDIR-}" in
   ${quote(snapshots)}/*)
