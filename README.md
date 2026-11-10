@@ -43,6 +43,19 @@ Extensions need explicit policy grants to read dependencies outside the permitte
 Each session uses a fixed access policy. Each new launch or reload resolves the policy paths again.
 The [design](docs/design.md) explains the sandbox boundaries and limitations.
 
+## Connect an agent to the Paseo daemon
+
+Safehouse agents cannot connect to the configured Paseo daemon port or use the agent-side Paseo tools.
+A `.safehouse` grant cannot override these plugin restrictions.
+
+For an agent that needs daemon access:
+
+1. Turn Safehouse off in the workspace header.
+2. Start a new agent with an ordinary provider, such as `pi`, `claude`, or `codex`.
+
+This new agent runs outside Safehouse.
+Reload does not remove the sandbox from an existing Safehouse agent.
+
 ## Development
 
 Use a separate Paseo daemon for tests.
