@@ -4,8 +4,6 @@
 This plugin applies those limits to [Paseo](https://github.com/getpaseo/paseo) agents through a workspace’s `.safehouse` policy.
 You keep the normal model picker and conversations.
 
-This plugin is a beta candidate. Runtime checks passed with Paseo 0.15.3, Safehouse 0.12.0, Pi, Claude, and Codex.
-
 ## Install
 
 Install Paseo and Agent Safehouse on the Mac that runs the Paseo daemon.
