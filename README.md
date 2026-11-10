@@ -1,36 +1,49 @@
 # Paseo Safehouse
 
-Run [Paseo](https://github.com/getpaseo/paseo) agents inside [Agent Safehouse](https://github.com/eugene1g/agent-safehouse) on macOS.
-Use a workspace’s `.safehouse` policy to control file access while keeping Paseo’s normal model picker and conversations.
+[Agent Safehouse](https://github.com/eugene1g/agent-safehouse) limits agent access to files through the native macOS sandbox, `sandbox-exec`.
+This plugin applies those limits to [Paseo](https://github.com/getpaseo/paseo) agents through a workspace’s `.safehouse` policy.
+You keep the normal model picker and conversations.
 
-Beta candidate. Tested with Paseo 0.15.3 and Safehouse 0.12.0, using Pi, Claude, and Codex.
+This plugin is a beta candidate. Runtime checks passed with Paseo 0.15.3, Safehouse 0.12.0, Pi, Claude, and Codex.
 
 ## Install
 
-Install Paseo and Agent Safehouse on the daemon host, then install this plugin:
+Install Paseo and Agent Safehouse on the Mac that runs the Paseo daemon.
+Then install this plugin:
 
 ```sh
 paseo plugin install https://github.com/clkao/paseo-safehouse
 ```
 
-Open the **Safehouse** panel and select **Refresh providers**.
-This beta targets clean installations. Older Safehouse plugins can have conflicting provider IDs.
+Open the **Safehouse** panel.
+Select **Refresh providers**.
 
 ## Use
 
-1. Open a workspace with `.safehouse`, or create a policy in the **Safehouse** panel.
-2. Use the workspace header to turn automatic Safehouse routing on or off for new agents.
-3. Select your usual provider and model, then start an agent.
-4. To change access, select **Review access**, edit the policy, and select **Save policy**.
+1. Open a workspace with a `.safehouse` policy. If no policy exists, create one in the **Safehouse** panel.
+2. Use the workspace header to enable or disable Safehouse for new agents.
+3. Select your usual provider and model.
+4. Start an agent.
+
+To change access:
+
+1. Open the **Safehouse** panel.
+2. Select **Review access**.
+3. Edit the policy.
+4. Select **Save policy**.
 5. Reload an existing Safehouse agent to apply the saved policy.
 
 The agent pill shows its Safehouse status. Reload preserves the conversation and provider.
-The workspace toggle does not change existing agents. Explicit Safehouse providers always remain sandboxed.
+The workspace toggle does not change existing agents. Explicit Safehouse providers always use the sandbox.
 
-Safehouse restricts the agent process and its children. The Paseo daemon and additional MCP services retain their own authority.
-Extensions that load files outside readable locations need explicit policy grants.
-Each launch or reload reads the policy again; protection across separate sessions is outside this beta’s scope.
-See the [design](docs/design.md) for boundary details and limitations.
+## Access limits
+
+Safehouse restricts the agent process and its child processes.
+The Paseo daemon and additional MCP services retain their own access permissions.
+Extensions need explicit policy grants to read dependencies outside the permitted locations.
+
+Each session uses a fixed access policy. Each new launch or reload resolves the policy paths again.
+The [design](docs/design.md) explains the sandbox boundaries and limitations.
 
 ## Development
 
@@ -43,7 +56,8 @@ npm test
 ```
 
 The macOS tests require an installed Safehouse binary.
-See [implementation status](docs/implementation.md) and the [development workflow](docs/dev/README.md) for evidence and remaining acceptance checks.
+The [implementation status](docs/implementation.md) records evidence and remaining acceptance checks.
+The [development workflow](docs/dev/README.md) defines the review process.
 
 ## License
 
