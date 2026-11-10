@@ -34,11 +34,10 @@ export function parsePolicy(raw: string): Policy {
         `Line ${index + 1}: unsupported setting ${key}. The file was preserved.`,
       );
     let value = text.slice(at + 1).trim();
-    if (
+    const quoted =
       (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    )
-      value = value.slice(1, -1);
+      (value.startsWith("'") && value.endsWith("'"));
+    if (quoted) value = value.slice(1, -1);
     const values =
       field === "enable"
         ? value.split(",")
@@ -48,11 +47,19 @@ export function parsePolicy(raw: string): Policy {
     for (const item of values) {
       if (!item.trim() || /[\0\r\n]/.test(item))
         throw new Error(`Line ${index + 1}: invalid or empty value.`);
+      // Whitespace around an unquoted value is formatting. Inside quotes it would be part of the path.
+      if (quoted && field !== "enable" && item !== item.trim())
+        throw new Error(
+          `Line ${index + 1}: a path cannot begin or end with whitespace.`,
+        );
       result[field].push(item.trim());
     }
   });
   return result;
 }
+// Quotes a path with every character outside printable ASCII escaped, so an invisible edge character shows.
+export const quotePath = (value: string) =>
+  JSON.stringify(value).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 export function renderPolicy(policy: Policy): string {
   const lines = ["# Safehouse access for this workspace."];
   for (const [key, values] of [
@@ -69,6 +76,10 @@ export function renderPolicy(policy: Policy): string {
       )
         throw new Error(
           "Paths must be nonempty and cannot contain colons or line breaks.",
+        );
+      if (key !== "enable" && value !== value.trim())
+        throw new Error(
+          `A path cannot begin or end with whitespace: ${quotePath(value)}`,
         );
       lines.push(`${key}=${value.trim()}`);
     }

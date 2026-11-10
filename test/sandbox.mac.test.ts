@@ -223,3 +223,62 @@ console.log(JSON.stringify(result));if(process.argv.includes('--fail'))process.e
   assert.equal(await fs.readFile(marker, "utf8"), "host");
   t.diagnostic("Configured copilot-derived command: allowed workspace read/write, denied sibling read/write, literal argv; exit 23 preserved with no outside marker. Direct negative control accessed sibling.");
 });
+
+test("a launch reaches the paths its policy names and no trimmed sibling", { skip: process.platform !== "darwin" }, async (t) => {
+  const binary = await findExecutable("safehouse");
+  assert.ok(binary, "Safehouse must be installed");
+  const base = await fs.mkdtemp(path.join(os.homedir(), ".safehouse-authority-"));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const q = JSON.stringify;
+  const fixture = async (name: string, workspace = "workspace") => {
+    const dir = path.join(base, name), cwd = path.join(dir, workspace), root = path.join(dir, "state");
+    const secret = path.join(dir, "secret"), shared = path.join(dir, "shared"), lib = path.join(cwd, "lib");
+    for (const made of [lib, root, secret, shared]) await fs.mkdir(made, { recursive: true });
+    await fs.writeFile(path.join(secret, "canary"), "private");
+    const guard = path.join(root, "guard.sb"), bootstrap = path.join(root, "launch.sh");
+    await fs.writeFile(guard, guardProfile([root], [], []));
+    await fs.writeFile(bootstrap, renderBootstrap({ root, binary, guard, executable: process.execPath, host: "claude" }));
+    const launch = async (snapshot: string, body: string): Promise<Record<string, string>> => JSON.parse((await run("/bin/sh", [bootstrap, "-e",
+      `const fs=require('node:fs');const r={};const a=(k,f)=>{try{r[k]=f()??'allowed'}catch(e){r[k]=e.code}};${body};console.log(JSON.stringify(r))`,
+    ], { cwd, env: policyEnvironment(process.env, snapshot), timeout: 45000 })).stdout);
+    const access = `a('secret',()=>fs.readFileSync(${q(path.join(secret, "canary"))},'utf8'));a('workspace',()=>fs.writeFileSync(${q(path.join(cwd, "ordinary"))},'ok'));
+a('child',()=>{fs.mkdirSync(${q(path.join(cwd, "made"))},{recursive:true});fs.writeFileSync(${q(path.join(cwd, "made", "file"))},'ok');fs.writeFileSync(${q(path.join(lib, "file"))},'ok')});`;
+    return { dir, cwd, root, secret, shared, lib, launch, access };
+  };
+  const allowed = { secret: "EPERM", workspace: "allowed", child: "allowed" };
+  await t.test("ordinary grants, read-only grants, profiles and symlink inputs keep their access", async () => {
+    const f = await fixture("ordinary"), [readOnly, profiled] = ["read-only", "profiled"].map((name) => path.join(f.dir, name));
+    for (const dir of [readOnly, profiled]) {
+      await fs.mkdir(dir);
+      await fs.writeFile(path.join(dir, "canary"), "fixture");
+    }
+    await fs.symlink(f.shared, path.join(f.cwd, "shared-link"));
+    await fs.writeFile(path.join(f.cwd, "extra.sb"), `(allow file-read* (subpath ${q(profiled)}))\n`);
+    const policy = await resolvePolicy("add-dirs=./shared-link\nadd-dirs-ro=../read-only\nappend-profile=./extra.sb\n", f.cwd, []);
+    const probe = (key: string, dir: string) => `a('${key}Read',()=>fs.readFileSync(${q(path.join(dir, "canary"))},'utf8'));a('${key}Write',()=>fs.writeFileSync(${q(path.join(dir, "file"))},'ok'));`;
+    const result = await f.launch(await prepareSnapshot(f.root, policy), f.access + `a('grantWrite',()=>fs.writeFileSync(${q(path.join(f.shared, "file"))},'ok'));` + probe("readOnly", readOnly) + probe("profile", profiled));
+    assert.deepEqual(result, { ...allowed, grantWrite: "allowed", readOnlyRead: "fixture", readOnlyWrite: "EPERM", profileRead: "fixture", profileWrite: "EPERM" });
+    assert.equal(await fs.readFile(path.join(f.shared, "file"), "utf8"), "ok");
+  });
+  // Each exact directory has an independently named sibling that a trimmed value would name instead.
+  for (const kind of ["workspace", "grant"]) await t.test(`${kind} path with trailing whitespace`, async (t) => {
+    const f = await fixture(`whitespace ${kind}`, kind === "workspace" ? "workspace " : "main");
+    const exact = kind === "workspace" ? f.cwd : path.join(f.dir, "grant "), trimmed = path.join(f.dir, kind);
+    await fs.mkdir(trimmed);
+    await fs.writeFile(path.join(trimmed, "canary"), "unintended");
+    if (kind === "grant") {
+      await fs.mkdir(exact);
+      await fs.symlink(exact, path.join(f.cwd, "link"));
+    }
+    const snapshot = await resolvePolicy(kind === "grant" ? "add-dirs=./link\n" : "", f.cwd, []).then((policy) => prepareSnapshot(f.root, policy)).catch((error: Error) => error);
+    if (snapshot instanceof Error) {
+      assert.match(snapshot.message, /whitespace/);
+      assert.ok(snapshot.message.includes(q(exact)), snapshot.message);
+      return assert.deepEqual(await fs.readdir(path.join(f.root, "snapshots")).catch(() => []), []);
+    }
+    const result = await f.launch(snapshot, `a('exact',()=>fs.writeFileSync(${q(path.join(exact, "nonce"))},'ok'));a('trimmedRead',()=>fs.readFileSync(${q(path.join(trimmed, "canary"))},'utf8'));a('trimmedWrite',()=>fs.writeFileSync(${q(path.join(trimmed, "nonce"))},'bad'));`);
+    const observer = { exact: await fs.readFile(path.join(exact, "nonce"), "utf8").catch(() => null), trimmed: await fs.readFile(path.join(trimmed, "nonce"), "utf8").catch(() => null) };
+    t.diagnostic(JSON.stringify({ result, observer }));
+    assert.deepEqual({ result, observer }, { result: { exact: "allowed", trimmedRead: "EPERM", trimmedWrite: "EPERM" }, observer: { exact: "ok", trimmed: null } });
+  });
+});

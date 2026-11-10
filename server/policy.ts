@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { parsePolicy } from "../shared/policy";
+import { parsePolicy, quotePath } from "../shared/policy";
 
 export const run = promisify(execFile);
 export const hash = (text: string) =>
@@ -127,9 +127,12 @@ export async function readSource(cwd: string) {
     throw error;
   }
 }
-function policyPath(value: string) {
+// Safehouse trims each configuration value, so a value with edge whitespace would name a different path.
+function policyPath(value: string, exact = true) {
   if (/[:\r\n\0]/.test(value))
     throw new Error("Safehouse paths cannot contain colons, line breaks, or NUL.");
+  if (exact && value !== value.trim())
+    throw new Error(`Safehouse cannot grant a path that begins or ends with whitespace: ${quotePath(value)}`);
   return value;
 }
 export async function resolvePolicy(
@@ -142,7 +145,7 @@ export async function resolvePolicy(
   for (const feature of parsed.enable)
     if (!supported.includes(feature))
       throw new Error(`Unsupported Safehouse capability: ${feature}`);
-  const resolve = async (value: string) => {
+  const resolve = async (value: string, grant = true) => {
     const expanded =
       value === "~"
         ? homedir()
@@ -150,17 +153,18 @@ export async function resolvePolicy(
           ? path.join(homedir(), value.slice(2))
           : value;
     const real = await fs.realpath(path.resolve(cwd, expanded));
-    return policyPath(real);
+    return policyPath(real, grant);
   };
   const readOnly = [
-    ...new Set(await Promise.all(parsed.readOnly.map(resolve))),
+    ...new Set(await Promise.all(parsed.readOnly.map((value) => resolve(value)))),
   ];
   const readWrite = [
-    ...new Set(await Promise.all(parsed.readWrite.map(resolve))),
+    ...new Set(await Promise.all(parsed.readWrite.map((value) => resolve(value)))),
   ];
   const profiles = await Promise.all(
     parsed.profiles.map(async (value) => {
-      const file = await resolve(value);
+      // A profile is copied into the snapshot, so its own path is never a configuration value.
+      const file = await resolve(value, false);
       const stat = await fs.stat(file);
       if (!stat.isFile() || stat.size > 1024 * 1024)
         throw new Error("Custom profiles must be regular files under 1 MB.");
@@ -219,9 +223,8 @@ export function guardProfile(
 export async function prepareSnapshot(root: string, policy: ResolvedPolicy) {
   policyPath(root);
   policyPath(policy.cwd);
-  policy.readOnly.forEach(policyPath);
-  policy.readWrite.forEach(policyPath);
-  policy.profiles.forEach((profile) => policyPath(profile.path));
+  for (const p of [...policy.readOnly, ...policy.readWrite]) policyPath(p);
+  policy.profiles.forEach((profile) => policyPath(profile.path, false));
   const parent = path.join(root, "snapshots");
   const prefix = policyPath(path.join(parent, `${policy.digest.slice(0, 12)}-`));
   await fs.mkdir(parent, { recursive: true, mode: 0o700 });

@@ -161,6 +161,21 @@ Fixed final restrictions protect plugin state, snapshots, plugin code, and the d
 Changing a source file after preparation cannot change the prepared snapshot.
 The opening hook resolves the source again before preparing the snapshot. Later source changes affect only subsequent processes.
 
+The fixed restrictions name fixed paths.
+They hold only while each protected folder is outside the workspace and outside every read-write grant.
+A process that can write a folder containing a protected folder can rename the containing folder and reach the protected contents at the new path.
+A plugin checkout inside a sandboxed workspace or grant meets that condition, so plugin development is done outside the sandbox.
+A grant on a folder that contains the daemon home or the installed plugin meets it too.
+
+Safehouse trims whitespace around each configured path.
+Resolution therefore rejects a workspace or grant whose canonical path begins or ends with whitespace, and the policy file and editor reject a quoted path with edge whitespace.
+
+Like Safehouse run from a shell, the plugin fixes a process's access when that process launches, and every launch and reload resolves the policy's paths again.
+The snapshot denies the managed process writes to `.safehouse` and to each resolved profile file at its path.
+It does not stop the process from changing other files, links, or folders it can write, so a later launch or reload at the same paths can resolve to a different policy or grant.
+That includes a link or folder on the way to a grant or profile, a granted file, the workspace folder itself, and a symbolic link through which the workspace was opened.
+A later launch uses whatever the paths lead to then.
+
 ### Provider discovery
 
 The ordinary provider supplies the picker’s model catalog before workspace routing occurs.

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { parsePolicy } from "../shared/policy";
+import { emptyPolicy, parsePolicy, renderPolicy } from "../shared/policy";
 import {
   atomicJson,
   hash,
@@ -467,6 +467,38 @@ test("ordinary path bytes and symlink targets retain isolated snapshots", async 
   assert.equal(await fs.readFile(path.join(first, "profile-0.sb"), "utf8"), content);
   assert.equal(await fs.readFile(path.join(second, "profile-0.sb"), "utf8"), content);
   assert.equal(await fs.readFile(path.join(cwd, ".safehouse"), "utf8"), raw);
+});
+
+test("paths with edge whitespace are rejected instead of trimmed", async (t) => {
+  const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-whitespace-")));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const spaced = path.join(base, "grant "), plain = path.join(base, "grant"), link = path.join(base, "link"), root = path.join(base, "state");
+  for (const dir of [spaced, plain]) await fs.mkdir(dir);
+  await fs.symlink(spaced, link);
+  const names = (e: Error) => /whitespace/.test(e.message) && e.message.includes(JSON.stringify(spaced));
+  await assert.rejects(resolvePolicy("", spaced, []), names);
+  for (const directive of ["add-dirs", "add-dirs-ro"])
+    await assert.rejects(resolvePolicy(`${directive}=${link}\n`, plain, []), names);
+  const policy = await resolvePolicy("", plain, []);
+  for (const input of [{ ...policy, cwd: spaced }, { ...policy, readOnly: [spaced] }, { ...policy, readWrite: [spaced] }])
+    await assert.rejects(prepareSnapshot(root, input), names);
+  assert.deepEqual(await fs.readdir(path.join(root, "snapshots")).catch(() => []), []);
+  // A profile is copied into the snapshot, so its own name is never serialized as a config value.
+  const profile = path.join(base, "profile.sb ");
+  await fs.writeFile(profile, "; profile\n");
+  await fs.symlink(profile, path.join(base, "profile-link"));
+  const copied = await resolvePolicy(`append-profile=${path.join(base, "profile-link")}\n`, plain, []);
+  assert.equal(copied.profiles[0].path, profile);
+  assert.equal(await fs.readFile(path.join(await prepareSnapshot(root, copied), "profile-0.sb"), "utf8"), "; profile\n");
+  // Formatting whitespace keeps its meaning. Quoted or editor-supplied edge whitespace is significant.
+  assert.deepEqual(parsePolicy("add-dirs = /a : /b \nappend-profile = x.sb \n"), { ...emptyPolicy(), readWrite: ["/a", "/b"], profiles: ["x.sb"] });
+  for (const raw of ['add-dirs="/a "', "add-dirs-ro=' /a'", 'append-profile="x.sb "'])
+    assert.throws(() => parsePolicy(raw), /Line 1: .*whitespace/);
+  assert.throws(() => renderPolicy({ ...emptyPolicy(), readWrite: ["/a "] }), /whitespace/);
+  // An invisible edge character is escaped, so the quoted path shows it.
+  assert.throws(() => renderPolicy({ ...emptyPolicy(), readWrite: ["/a\u00a0"] }), /whitespace: "\/a\\u00a0"$/);
+  await assert.rejects(prepareSnapshot(root, { ...policy, readWrite: ["/a\ufeff"] }), /whitespace: "\/a\\ufeff"$/);
+  assert.equal(renderPolicy({ ...emptyPolicy(), readWrite: ["/a b"] }), "# Safehouse access for this workspace.\nadd-dirs=/a b\n");
 });
 
 test("setup wraps configured providers, preserves ordinary entries and rejects drift", { skip: process.platform !== "darwin" }, async (t) => {
