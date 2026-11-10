@@ -6,15 +6,15 @@ The plugin uses a workspace’s existing `.safehouse` policy automatically unles
 Use Paseo’s normal provider picker to start sandboxed agents. Review access when you want to inspect or edit the policy.
 The workspace policy applies across supported providers while Paseo manages conversations, model selection, and resume.
 
-**Status: local human-test candidate. Release validation and staff-review corrections remain open.**
+**Status: beta candidate.**
 
-The candidate runs on an isolated daemon. The main daemon retains its existing installation.
-See [implementation status](docs/implementation.md) for the tested revision and remaining work.
+The plugin targets clean installations on macOS. Provider and policy checks use Paseo 0.15.3 and Safehouse 0.12.0.
+See [implementation status](docs/implementation.md) for evidence and remaining acceptance checks.
 
 ## Workflow
 
 1. Open a workspace that contains `.safehouse`.
-2. The candidate header shows **Safehouse auto on** when automatic routing is enabled and the workspace is ready.
+2. The candidate header shows **Safehouse On** when automatic routing is enabled and the workspace is ready.
 3. Select a provider and model, then start an agent.
 4. To inspect or change access, open **Safehouse**, choose **Review access**, and save edits with **Save policy**.
 5. To apply policy changes to an existing agent, reload that agent.
@@ -35,7 +35,7 @@ Workspaces without a policy keep their ordinary launch behavior. Existing sessio
 The daemon host must run macOS. Pi, Claude, and Codex passed initial live sandbox probes.
 The plugin selects Codex **Full Access** automatically for Safehouse launches.
 This disables Codex’s inner sandbox and approval prompts.
-Safehouse enforces the outer process boundary. Complete provider acceptance remains in progress.
+Safehouse enforces the outer process boundary. Pi, Claude, and Codex passed conversation continuity and workspace isolation checks.
 Setup also wraps explicit command arrays for supported built-in adapters, their direct derivatives, and generic custom ACP providers.
 Arguments retain their literal values. Explicit provider environment reaches both sandboxed sessions and catalog discovery, except blocked launch-control variables. Unsupported configurations fail with an instruction to disable automatic routing.
 The failed launch never retries outside Safehouse. A later ordinary launch requires your explicit workspace choice.
@@ -52,7 +52,7 @@ Development is managed by the [Spacedock dev workflow](docs/dev/README.md).
 The development agent runs outside Safehouse and uses an isolated daemon for sandboxed test agents.
 
 Beta acceptance targets Paseo 0.15.3 and Safehouse 0.12.0 on the daemon host.
-Earlier provider evidence used Paseo 0.15.2; full 0.15.3 acceptance remains open.
+The manifest accepts Paseo >=0.15.0. Other accepted versions have not received the same runtime checks.
 Development uses SDK 0.14 lifecycle aliases. The isolated 0.15.3 runtime checks cover this integration.
 
 ```sh

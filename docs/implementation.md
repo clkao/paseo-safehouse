@@ -2,48 +2,42 @@
 
 ## Current candidate
 
-The local human-test candidate is `d42c994fc2bde3f1adc40010e09fe25be2740a2e`.
-It targets clean isolated Paseo 0.15.3 and Safehouse 0.12.0 installations.
-The candidate is installed from its exact archive on the isolated `human-beta` daemon.
-The main daemon retains its existing installation and sessions. This candidate does not replace it.
+The integrated runtime at `99e61d9` includes independently reviewed launch controls, setup recovery, MCP disclosure, and edge-whitespace path rejection.
+The supported validation target is Paseo 0.15.3 with Safehouse 0.12.0 on macOS.
+The manifest accepts Paseo >=0.15.0 without an upper bound. This range does not certify other runtime versions.
 
-The archive contains 13 runtime files. Independent review matched the archive, extracted files and integrated source.
-TypeScript checks passed. The 74 relevant tests passed, including the installed-registry check.
-The exact archive passed setup, compilation, policy RPCs, and a real Codex launch and reload.
-Both turns allowed workspace access and denied sibling, policy, protected-state and daemon-port access.
-Native conversation identity survived process replacement.
+Policy authority covers access within the running session. Each launch or reload reads the policy again.
+Protection against changes that affect a later launch is a separate backlog task.
+The design documents the fixed-path restrictions and their limits.
 
-The candidate is ready for disposable human tests. It is not ready for publication.
-The Opus 5.5 staff review identified unresolved launch, setup and policy-authority issues.
-Rendered UI acceptance and the complete provider lifecycle matrix remain open.
-
-## Human test connection
-
-1. In Paseo on the daemon Mac, open the host selector.
-2. Select **Add host**, then **Direct connection**.
-3. Enter host `127.0.0.1` and port `63227`.
-4. Leave the password blank and **Use SSL** off.
-5. Connect and open **Safehouse beta human test**.
-
-This connection selects the isolated daemon. Relay pairing is not required.
-The test window remains open until the first officer records its completion and teardown.
+The current human-test installation at `127.0.0.1:62753` serves the earlier display revision `e4267b4`.
+Its workspace is **Safehouse beta next human test**. The final artifact refresh is in progress.
+CL accepted the rendered display and workspace toggle. Two-client synchronization and the complete policy review/recovery interaction remain unrecorded.
 
 ## Work and evidence
 
-| Area | Current result | Remaining work |
-| --- | --- | --- |
-| Policy serialization | Delimiter regressions and independent sandbox checks passed. | Probe path identity changes and whitespace handling. |
-| Codex options | Creation and native resume passed independent 0.15.3 checks. | Retain evidence at the final integrated revision. |
-| Workspace controls | Persistent routing, literal argv and live continuity passed. | Provider environment, refresh action, model-less launch behavior and rendered UI. |
-| Setup recovery | Interrupted-plan recovery and publication-order regression checks passed. | Removed providers and changing environment masks. |
-| MCP boundary | Process-boundary warning exists in documentation. | Remove residual MCP rejection and show an explicit panel warning. |
-| Pi discovery | Ordinary native picker and sandboxed tools passed with authorized extension dependencies. | Keep restricted variant catalog differences documented. |
-| Distribution | Exact archive and isolated installation passed bounded review. | Correct the manifest minimum and rebuild after reviewed fixes. |
-| Lifecycle acceptance | Codex artifact launch/reload passed. | Remaining provider, cancellation, concurrency, capability, profile and UI cases. |
+| Area | Recorded result |
+| --- | --- |
+| Policy paths | Independent whitespace regressions, ordinary access controls, artifact launch and reload passed. |
+| Provider conversations | Pi, Claude and Codex preserved native history and workspace isolation in the exercised configurations. |
+| Workspace controls | Automatic routing, literal arguments, configured environment, refresh and model-less ACP checks passed. |
+| Setup recovery | Interrupted setup, removed sources, restored providers and stale reserved masks passed independent checks. |
+| MCP boundary | Additional MCP services retain their own authority; the plugin warns without rejecting them. |
+| Pi discovery | Native picker works; external extension dependencies need explicit readable paths. |
+| Distribution | Exact 13-file archives and clean installation/update checks passed at their recorded revisions. |
+| Lifecycle | Current evidence requires independent consolidation against the final integrated artifact. |
 
-Task scope and durable reviews live in `docs/dev/.spacedock-state`.
-The staff report is `_handoff/opus-5.5-staff-review.md` within that state checkout.
-Existing checks establish their stated behaviors. They do not establish all release gates.
+Mutable task state and detailed reviews remain in the separate local `docs/dev/.spacedock-state` checkout.
+The current GitHub repository contains the source and public documentation, not local daemon data or credentials.
+
+## Human test connection
+
+1. In the local Paseo client, select **Add host**, then **Direct connection**.
+2. Enter host `127.0.0.1` and port `62753`.
+3. Leave the password blank and **Use SSL** off.
+4. Open **Safehouse beta next human test**.
+
+The isolated test installation remains separate from the main daemon.
 
 ## Evidence and constraints
 
