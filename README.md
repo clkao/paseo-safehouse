@@ -67,7 +67,8 @@ Only allow access when you intend to give the agent that authority.
 6. Ask the agent to run `paseo agent ls`.
 
 The plugin supplies `PASEO_HOME` for the active daemon. The panel shows its path and an explicit `--home` diagnostic command.
-When `/Applications/Paseo.app` is installed, On also grants read access to its bundled CLI and dependencies.
+On discovers the daemon host’s installed Paseo CLI and grants read access to its containing app bundle.
+This supports renamed apps and user Applications directories.
 This grant is part of the prepared snapshot; `.safehouse` stays unchanged.
 Native Paseo tools stay disabled. On enables direct CLI/API access.
 Saving leaves the policy editor, `.safehouse`, automatic routing, provider, and conversation unchanged.

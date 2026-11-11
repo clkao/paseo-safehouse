@@ -16,6 +16,35 @@ test('default-home wildcard listener retains its local TCP port restriction', ()
   assert.equal(service.defaultDaemonPort('/tmp/paseo.sock'),null);
 });
 
+test('daemon CLI discovery follows hints and symlinks without granting ordinary CLI parents', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(),'paseo-bundle-'));
+  const oldPath = process.env.PATH;
+  t.after(async()=>{process.env.PATH=oldPath;await fs.rm(root,{recursive:true,force:true});});
+  const app = path.join(root,'Applications','Renamed Paseo.app');
+  const cli = path.join(app,'Contents/Resources/bin/paseo');
+  await fs.mkdir(path.dirname(cli),{recursive:true});
+  await fs.writeFile(cli,'#!/bin/sh\necho fixture\n',{mode:0o700});
+  const bin = path.join(root,'bin');await fs.mkdir(bin);
+  const link = path.join(bin,'paseo');await fs.symlink(cli,link);
+  process.env.PATH=bin;
+  const discover = (runtime:any) => service.paseoAppBundle(runtime);
+  const canonical = await fs.realpath(app);
+  assert.equal(await discover({cli}),canonical);
+  assert.equal(await discover({cli:link}),canonical);
+  assert.equal(await discover({}),canonical);
+  const ordinary = path.join(root,'npm-cli');await fs.writeFile(ordinary,'#!/bin/sh\n',{mode:0o700});
+  assert.equal(await discover({cli:ordinary,resourcesPath:path.join(app,'Contents/Resources')}),null);
+  assert.equal(await discover({cli:path.join(root,'missing'),resourcesPath:path.join(app,'Contents/Resources')}),null);
+  process.env.PATH='';
+  assert.equal(await discover({resourcesPath:path.join(app,'Contents/Resources')}),canonical);
+  assert.equal(await discover({execPath:path.join(app,'Contents/Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper')}),canonical);
+  assert.equal(await discover({execPath:ordinary}),null);
+  await fs.unlink(link);await fs.symlink(ordinary,link);process.env.PATH=bin;
+  assert.equal(await discover({resourcesPath:path.join(app,'Contents/Resources')}),null);
+  await fs.chmod(cli,0o600);
+  assert.equal(await discover({cli}),null);
+});
+
 test('workspace daemon choice is atomic, independent and snapshot-bound', { skip: process.platform !== 'darwin' }, async t => {
   const base = await fs.realpath(await fs.mkdtemp(path.join(os.homedir(), '.safehouse-access-')));
   const home = path.join(base, 'home'), cwd = path.join(base, 'workspace'), other = path.join(base, 'other');
@@ -62,16 +91,22 @@ test('workspace daemon choice is atomic, independent and snapshot-bound', { skip
   assert.equal((await service.status(paseo,cwd)).agents[0].changed,true);
   assert.equal(await execute(off.env),'EPERM');
   await fs.writeFile(path.join(cwd,'.safehouse'),`add-dirs=${home}\nappend-profile=${profile}\n`);
+  const alternateApp = path.join(other,'Applications','Renamed Paseo.app');
+  const bundledCli = path.join(alternateApp,'Contents/Resources/bin/paseo');
+  await fs.mkdir(path.dirname(bundledCli),{recursive:true});
+  await fs.writeFile(bundledCli,'#!/bin/sh\necho 9.9.9\n',{mode:0o700});
+  const hint = path.join(cwd,'paseo-link');await fs.symlink(bundledCli,hint);
+  const oldCli = process.env.PASEO_CLI;process.env.PASEO_CLI=hint;
+  t.after(()=>{if(oldCli===undefined)delete process.env.PASEO_CLI;else process.env.PASEO_CLI=oldCli;});
   const sourceBeforeOn = await fs.readFile(path.join(cwd,'.safehouse'),'utf8');
   const on = await service.prepareOpening(opening(),paseo);
-  const bundledCli = '/Applications/Paseo.app/Contents/Resources/bin/paseo';
   const hasBundledCli = await fs.stat(bundledCli).then(s=>s.isFile(),()=>false);
   const bundledVersion = `const r=require('node:child_process').spawnSync(${JSON.stringify(bundledCli)},['--version'],{encoding:'utf8'});console.log(JSON.stringify({status:r.status,stdout:r.stdout,stderr:r.stderr}))`;
   if (hasBundledCli) {
     const version = JSON.parse(await execute(on.env,bundledVersion));
     assert.equal(version.status,0,version.stderr);
     assert.match(version.stdout,/^\d+\.\d+\.\d+/);
-    assert.match(await fs.readFile(path.join(on.env.SAFEHOUSE_WORKDIR,'.safehouse'),'utf8'),/^add-dirs-ro=\/Applications\/Paseo\.app$/m);
+    assert.ok((await fs.readFile(path.join(on.env.SAFEHOUSE_WORKDIR,'.safehouse'),'utf8')).includes(`add-dirs-ro=${alternateApp}\n`));
   } else t.diagnostic('Bundled CLI runtime check requires /Applications/Paseo.app; live acceptance must supply it.');
   assert.equal(await fs.readFile(path.join(cwd,'.safehouse'),'utf8'),sourceBeforeOn);
   assert.equal(await execute(on.env),'allowed');
@@ -98,7 +133,7 @@ test('workspace daemon choice is atomic, independent and snapshot-bound', { skip
   assert.equal((await service.status(paseo,cwd)).agents[0].changed,true);
   assert.equal(await execute(on.env),'allowed');
   const denied = await service.prepareOpening(opening(),paseo);
-  assert.doesNotMatch(await fs.readFile(path.join(denied.env.SAFEHOUSE_WORKDIR,'.safehouse'),'utf8'),/Paseo\.app/);
+  assert.doesNotMatch(await fs.readFile(path.join(denied.env.SAFEHOUSE_WORKDIR,'.safehouse'),'utf8'),/Renamed Paseo\.app/);
   if (hasBundledCli) assert.notEqual(JSON.parse(await execute(denied.env,bundledVersion)).status,0);
   for (const transport of [probe,probe.replace('127.0.0.1','localhost'),probe.replace('127.0.0.1','::1'),socketProbe])
     assert.equal(await execute(denied.env,transport),'EPERM');

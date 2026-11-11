@@ -199,7 +199,10 @@ Each opening captures the choice, active home, default home, and their available
 The effective preparation digest includes that capture and the policy digest. Receipts record the prepared choice.
 Older receipts show unknown access and require reload. Saving does not change existing snapshots.
 On adds a writable grant for the canonical active home. It omits the daemon restrictions.
-When `/Applications/Paseo.app` is installed, On also adds its canonical path as a read-only grant.
+On resolves the daemon process’s `PASEO_CLI` hint, then its PATH, and adds the resolved CLI app bundle as a read-only grant.
+When neither selects a CLI, discovery checks the current runtime’s resources or executable path for its app bundle.
+The fallback requires an executable `Contents/Resources/bin/paseo` inside that same canonical bundle.
+An explicit invalid hint or a selected non-bundled CLI supplies no implicit grant. Discovery does not scan directories or use provider-specific PATH values.
 The preparation digest includes that path. Off omits this implicit app grant; explicit policy grants retain their normal behavior.
 Off appends daemon restrictions after custom profiles. Unconditional protection still covers plugin state, code, executables, policy sources, and snapshots.
 Catalog discovery always uses its fixed Off guard. Existing installations require **Refresh providers** before an On launch.
