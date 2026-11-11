@@ -62,7 +62,18 @@ test('workspace daemon choice is atomic, independent and snapshot-bound', { skip
   assert.equal((await service.status(paseo,cwd)).agents[0].changed,true);
   assert.equal(await execute(off.env),'EPERM');
   await fs.writeFile(path.join(cwd,'.safehouse'),`add-dirs=${home}\nappend-profile=${profile}\n`);
+  const sourceBeforeOn = await fs.readFile(path.join(cwd,'.safehouse'),'utf8');
   const on = await service.prepareOpening(opening(),paseo);
+  const bundledCli = '/Applications/Paseo.app/Contents/Resources/bin/paseo';
+  const hasBundledCli = await fs.stat(bundledCli).then(s=>s.isFile(),()=>false);
+  const bundledVersion = `const r=require('node:child_process').spawnSync(${JSON.stringify(bundledCli)},['--version'],{encoding:'utf8'});console.log(JSON.stringify({status:r.status,stdout:r.stdout,stderr:r.stderr}))`;
+  if (hasBundledCli) {
+    const version = JSON.parse(await execute(on.env,bundledVersion));
+    assert.equal(version.status,0,version.stderr);
+    assert.match(version.stdout,/^\d+\.\d+\.\d+/);
+    assert.match(await fs.readFile(path.join(on.env.SAFEHOUSE_WORKDIR,'.safehouse'),'utf8'),/^add-dirs-ro=\/Applications\/Paseo\.app$/m);
+  } else t.diagnostic('Bundled CLI runtime check requires /Applications/Paseo.app; live acceptance must supply it.');
+  assert.equal(await fs.readFile(path.join(cwd,'.safehouse'),'utf8'),sourceBeforeOn);
   assert.equal(await execute(on.env),'allowed');
   for (const transport of [probe.replace('127.0.0.1','localhost'),probe.replace('127.0.0.1','::1'),socketProbe])
     assert.equal(await execute(on.env,transport),'allowed');
@@ -87,6 +98,8 @@ test('workspace daemon choice is atomic, independent and snapshot-bound', { skip
   assert.equal((await service.status(paseo,cwd)).agents[0].changed,true);
   assert.equal(await execute(on.env),'allowed');
   const denied = await service.prepareOpening(opening(),paseo);
+  assert.doesNotMatch(await fs.readFile(path.join(denied.env.SAFEHOUSE_WORKDIR,'.safehouse'),'utf8'),/Paseo\.app/);
+  if (hasBundledCli) assert.notEqual(JSON.parse(await execute(denied.env,bundledVersion)).status,0);
   for (const transport of [probe,probe.replace('127.0.0.1','localhost'),probe.replace('127.0.0.1','::1'),socketProbe])
     assert.equal(await execute(denied.env,transport),'EPERM');
   const writes = [record,path.join(cwd,'.safehouse'),profile,path.join(on.env.SAFEHOUSE_WORKDIR,'.safehouse')];

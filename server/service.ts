@@ -158,9 +158,17 @@ async function daemonEndpoints(home: string, port: number) {
 async function effectivePolicy(policy: ResolvedPolicy, enabled: boolean, saved: Installation) {
   const details = await daemonDetails(saved.home);
   const endpoints = await daemonEndpoints(details.home, details.port);
+  let appBundle: string | null = null;
+  if (enabled) {
+    try {
+      if ((await fs.stat("/Applications/Paseo.app")).isDirectory())
+        appBundle = await fs.realpath("/Applications/Paseo.app");
+    } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+  }
   return {
     policy: { ...policy, readWrite: enabled ? [...new Set([...policy.readWrite, details.home])] : policy.readWrite,
-      digest: hash(JSON.stringify({ policy: policy.digest, enabled, home: details.home, ...endpoints })) },
+      readOnly: appBundle ? [...new Set([...policy.readOnly, appBundle])] : policy.readOnly,
+      digest: hash(JSON.stringify({ policy: policy.digest, enabled, home: details.home, appBundle, ...endpoints })) },
     guard: enabled ? "" : guardProfile(endpoints.homes, [], endpoints.ports),
   };
 }

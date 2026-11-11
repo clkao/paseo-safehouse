@@ -199,6 +199,8 @@ Each opening captures the choice, active home, default home, and their available
 The effective preparation digest includes that capture and the policy digest. Receipts record the prepared choice.
 Older receipts show unknown access and require reload. Saving does not change existing snapshots.
 On adds a writable grant for the canonical active home. It omits the daemon restrictions.
+When `/Applications/Paseo.app` is installed, On also adds its canonical path as a read-only grant.
+The preparation digest includes that path. Off omits this implicit app grant; explicit policy grants retain their normal behavior.
 Off appends daemon restrictions after custom profiles. Unconditional protection still covers plugin state, code, executables, policy sources, and snapshots.
 Catalog discovery always uses its fixed Off guard. Existing installations require **Refresh providers** before an On launch.
 
