@@ -107,7 +107,8 @@ Use a disposable plugin copy and workspace when those paths otherwise overlap.
 2. In the panel, keep an unsaved policy draft while saving daemon access On.
 3. Check the authority warning, stale-save rejection, and distinct saved/prepared states.
 4. Refresh older providers, then reload the same agent.
-5. Run the installed `/Applications/Paseo.app/Contents/Resources/bin/paseo --version`, then `agent ls`.
+5. Run the resolved installed Paseo CLI with `--version`, then `agent ls`.
+   Include a renamed app, a user Applications directory, and a symlink launcher in discovery checks.
    Keep `.safehouse` free of daemon-home and app-bundle grants, with no existing `cli-client-id`.
    On must supply both grants through the generated snapshot. Off must omit the implicit app grant after reload.
 6. Save Off, reload, and attempt explicit-address access with a separate writable CLI cache.

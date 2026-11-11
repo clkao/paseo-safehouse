@@ -155,16 +155,35 @@ async function daemonEndpoints(home: string, port: number) {
   const defaultPort = defaultDaemonPort(listen);
   return { homes: [...new Set([home, defaultHome, canonicalDefault])], ports: [...new Set([port, ...(defaultPort ? [defaultPort] : [])])] };
 }
+export async function paseoAppBundle(runtime: { cli?: string; execPath?: string; resourcesPath?: string } = {
+  cli: process.env.PASEO_CLI, execPath: process.execPath,
+  resourcesPath: (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
+}) {
+  const bundleFor = async (file: string) => {
+    const executable = await findExecutable(file);
+    if (!executable) return null;
+    const canonical = await fs.realpath(executable);
+    return canonical.match(/^(.*\.app)\/Contents\/Resources\/bin\/paseo$/)?.[1] ?? null;
+  };
+  // An explicit hint or PATH command selects the CLI, even when it is not bundled.
+  if (runtime.cli?.trim()) return bundleFor(path.resolve(runtime.cli.trim()));
+  const cli = await findExecutable("paseo");
+  if (cli) return bundleFor(cli);
+  const bundles = [
+    runtime.resourcesPath?.match(/^(.*\.app)\/Contents\/Resources$/)?.[1],
+    runtime.execPath?.match(/^(.*?\.app)\/Contents\//)?.[1],
+  ];
+  for (const bundle of bundles) {
+    if (!bundle) continue;
+    const resolved = await bundleFor(path.join(bundle,"Contents/Resources/bin/paseo"));
+    if (resolved && resolved === await fs.realpath(bundle)) return resolved;
+  }
+  return null;
+}
 async function effectivePolicy(policy: ResolvedPolicy, enabled: boolean, saved: Installation) {
   const details = await daemonDetails(saved.home);
   const endpoints = await daemonEndpoints(details.home, details.port);
-  let appBundle: string | null = null;
-  if (enabled) {
-    try {
-      if ((await fs.stat("/Applications/Paseo.app")).isDirectory())
-        appBundle = await fs.realpath("/Applications/Paseo.app");
-    } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
-  }
+  const appBundle = enabled ? await paseoAppBundle() : null;
   return {
     policy: { ...policy, readWrite: enabled ? [...new Set([...policy.readWrite, details.home])] : policy.readWrite,
       readOnly: appBundle ? [...new Set([...policy.readOnly, appBundle])] : policy.readOnly,
