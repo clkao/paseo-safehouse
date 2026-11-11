@@ -290,3 +290,4 @@ These improvements are outside the first beta requirements.
 | Final external-capability visibility | Final merged MCP/tool inventory and an optional veto | Disclose external authority; hook-local maps cannot establish global filtering. |
 | Permission changes during reopen | Supported mutation of effective provider options before resume | Persist compatible creation options and test native resume. |
 | Sandboxed workspace tools | Scoped terminal execution and environment APIs | [Workspace capabilities](workspace-capabilities.md) remains a separate design draft. |
+| Sandboxed agent coordination | Scoped agent creation, messaging, and completion APIs | [Agent coordination](agent-coordination.md) remains a separate design draft. |
