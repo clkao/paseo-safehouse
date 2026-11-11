@@ -53,6 +53,7 @@ export type Installation = {
   sources?: Record<string, Source>;
   unavailable?: Record<string, string>;
   guard: string;
+  catalogGuard?: string;
   piCatalogExtensions?: string[];
 };
 type Receipt = {
@@ -63,6 +64,7 @@ type Receipt = {
   snapshot: string;
   preparedAt: string;
   reason: string;
+  daemonAccess?: boolean;
 };
 export const receiptPath = (id: string) =>
   path.join(stateRoot(), "agents", `${hash(id)}.json`);
@@ -82,6 +84,32 @@ export async function setWorkspaceRouting(paseo: Paseo, workspaceId: string, ena
   const cwd = await workspaceCwd(paseo, workspaceId);
   await atomicJson(routingPath(cwd), { cwd, enabled });
   return { enabled };
+}
+
+const accessPath = (cwd: string) => path.join(stateRoot(), "workspaces", `${hash(cwd)}.daemon-access.json`);
+async function daemonChoice(cwd: string) {
+  let raw: string | null = null;
+  try {
+    const file = accessPath(cwd);
+    const stat = await fs.lstat(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4096) throw new Error("Invalid record");
+    raw = await fs.readFile(file, "utf8");
+    const record = JSON.parse(raw);
+    if (record.cwd !== cwd || typeof record.enabled !== "boolean") throw new Error("Invalid record");
+    return { enabled: record.enabled as boolean, revision: policyRevision(raw) };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { enabled: false, revision: policyRevision(null) };
+    throw new Error("Safehouse daemon access state is unreadable or invalid. Repair the protected record before launch.");
+  }
+}
+export async function setDaemonAccess(paseo: Paseo, workspaceId: string, enabled: boolean, revision: string) {
+  const cwd = await workspaceCwd(paseo, workspaceId);
+  return serializeSetup(accessPath(cwd), async () => {
+    if ((await daemonChoice(cwd)).revision !== revision)
+      throw new Error("Daemon access changed in another client. Your draft is retained; review the saved choice and retry.");
+    await atomicJson(accessPath(cwd), { cwd, enabled });
+    return daemonChoice(cwd);
+  });
 }
 
 export async function workspaceCwd(paseo: Paseo, id: string) {
@@ -111,6 +139,37 @@ async function daemonDetails(capturedHome = daemonHome()) {
     home,
     port: Number(listen.split(":").at(-1)),
     source: await fs.realpath(source),
+  };
+}
+export function defaultDaemonPort(listen?: string) {
+  return Number(listen?.split(":").at(-1)) || null;
+}
+async function daemonEndpoints(home: string, port: number) {
+  const defaultHome = path.join(homedir(), ".paseo");
+  let canonicalDefault = defaultHome;
+  try { canonicalDefault = await fs.realpath(defaultHome); }
+  catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+  const pid = await readJson<{ listen?: string }>(path.join(defaultHome, "paseo.pid"));
+  const config = await readJson<{ daemon?: { listen?: string } }>(path.join(defaultHome, "config.json"));
+  const listen = pid?.listen ?? config?.daemon?.listen;
+  const defaultPort = defaultDaemonPort(listen);
+  return { homes: [...new Set([home, defaultHome, canonicalDefault])], ports: [...new Set([port, ...(defaultPort ? [defaultPort] : [])])] };
+}
+async function effectivePolicy(policy: ResolvedPolicy, enabled: boolean, saved: Installation) {
+  const details = await daemonDetails(saved.home);
+  const endpoints = await daemonEndpoints(details.home, details.port);
+  let appBundle: string | null = null;
+  if (enabled) {
+    try {
+      if ((await fs.stat("/Applications/Paseo.app")).isDirectory())
+        appBundle = await fs.realpath("/Applications/Paseo.app");
+    } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+  }
+  return {
+    policy: { ...policy, readWrite: enabled ? [...new Set([...policy.readWrite, details.home])] : policy.readWrite,
+      readOnly: appBundle ? [...new Set([...policy.readOnly, appBundle])] : policy.readOnly,
+      digest: hash(JSON.stringify({ policy: policy.digest, enabled, home: details.home, appBundle, ...endpoints })) },
+    guard: enabled ? "" : guardProfile(endpoints.homes, [], endpoints.ports),
   };
 }
 export async function installation() {
@@ -189,15 +248,13 @@ async function setupLocked(
     throw new Error(
       "No configured harness can be wrapped. Check command arrays and executable availability.",
     );
-  const mainHome = path.join(homedir(), ".paseo");
-  const mainPid = await readJson<{ listen?: string }>(
-    path.join(mainHome, "paseo.pid"),
-  );
-  const mainPort = Number(mainPid?.listen?.split(":").at(-1));
-  const guardText = guardProfile([root, details.home, mainHome], protectedPaths, [details.port, ...(mainPort ? [mainPort] : [])]);
+  const endpoints = await daemonEndpoints(details.home, details.port);
+  const guardText = guardProfile([root], protectedPaths, []);
   const guard = path.join(root, `guard-${hash(guardText).slice(0, 16)}.sb`);
+  const catalogText = guardText + guardProfile(endpoints.homes, [], endpoints.ports);
+  const catalogGuard = path.join(root, `catalog-${hash(catalogText).slice(0, 16)}.sb`);
   for (const { host, base, config, command, envPass } of wrappers) {
-    const text = renderBootstrap({ root, binary, guard, command, host: base, piCatalogExtensions, envPass });
+    const text = renderBootstrap({ root, binary, guard, catalogGuard, command, host: base, piCatalogExtensions, envPass });
     const file = path.join(root, "launchers", `${hash(host).slice(0, 16)}-${hash(text).slice(0, 16)}.sh`);
     bootstraps.push({ file, text });
     const retainedMasks = Object.fromEntries(Object.entries(old?.entries[variant(host)]?.env ?? {})
@@ -211,9 +268,9 @@ async function setupLocked(
     if (!isDeepStrictEqual(current[id] ?? null, old?.entries[id] ?? null))
       throw new Error(`Provider ${id} belongs to another configuration. It was not changed.`);
   await savePending(root, {
-    installation: { binary, ...caps, ...details, entries, sources, unavailable, guard, piCatalogExtensions },
+    installation: { binary, ...caps, ...details, entries, sources, unavailable, guard, catalogGuard, piCatalogExtensions },
     previous: Object.fromEntries(Object.keys(entries).map(id => [id, current[id] ?? null])),
-    files: [{ file: guard, text: guardText }, ...bootstraps],
+    files: [{ file: guard, text: guardText }, { file: catalogGuard, text: catalogText }, ...bootstraps],
   });
   await finishPending(root, paseo, details);
   return { providers: Object.keys(entries) };
@@ -312,6 +369,7 @@ export async function routeCreation(
   }
   const saved = await recover(ready(paseo, provider));
   await recover(loadPolicy(cwd, saved.features));
+  await recover(daemonChoice(cwd));
   let model = request.config.model;
   if (!model) {
     const original = installed.sources?.[provider]?.provider ?? host;
@@ -350,8 +408,11 @@ export async function prepareOpening(
   if (!(await installation())?.entries[request.provider]) return request;
   const saved = await ready(paseo, request.provider);
   const cwd = await canonicalDirectory(request.cwd);
-  const policy = await loadPolicy(cwd, saved.features);
-  const snapshot = await prepareSnapshot(stateRoot(), policy);
+  const choice = await daemonChoice(cwd);
+  if (choice.enabled && !saved.catalogGuard) throw new Error("Refresh providers before enabling daemon access for a launch.");
+  const effective = await effectivePolicy(await loadPolicy(cwd, saved.features), choice.enabled, saved);
+  const policy = effective.policy;
+  const snapshot = await prepareSnapshot(stateRoot(), policy, effective.guard);
   await atomicJson(receiptPath(request.agentId), {
     agentId: request.agentId,
     cwd,
@@ -360,8 +421,9 @@ export async function prepareOpening(
     snapshot,
     preparedAt: new Date().toISOString(),
     reason: request.reason,
+    daemonAccess: choice.enabled,
   } satisfies Receipt);
-  return { ...request, env: policyEnvironment(request.env, snapshot) };
+  return { ...request, env: policyEnvironment(request.env, snapshot, saved.home) };
 }
 export async function status(paseo: Paseo, workspaceId: string) {
   const cwd = await workspaceCwd(paseo, workspaceId);
@@ -369,13 +431,15 @@ export async function status(paseo: Paseo, workspaceId: string) {
   let error: string | null = null,
     raw: string | null = null,
     policy: ResolvedPolicy | null = null;
+  let access = { enabled: false, revision: "" };
+  try { access = await daemonChoice(cwd); } catch (e) { error = String(e); }
   let policySource: "defaults" | "file" | null = null;
   let routing: boolean | null = null, routingError: string | null = null;
   try { routing = await routingChoice(cwd); } catch (e) { routingError = String(e); }
   try {
     raw = await readSource(cwd);
     policySource = raw === null ? "defaults" : "file";
-    if (saved) policy = await resolvePolicy(raw ?? "", cwd, saved.features);
+    if (saved) policy = (await effectivePolicy(await resolvePolicy(raw ?? "", cwd, saved.features), access.enabled, saved)).policy;
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -418,7 +482,8 @@ export async function status(paseo: Paseo, workspaceId: string) {
           title: agent.title || agent.id,
           provider: agent.provider,
           digest: receipt?.digest ?? null,
-          changed: !!receipt && !!policy && receipt.digest !== policy.digest,
+          daemonAccess: receipt?.daemonAccess ?? null,
+          changed: !receipt || (!!policy && (receipt.digest !== policy.digest || receipt.daemonAccess !== access.enabled)),
           preparedAt: receipt?.preparedAt ?? null,
         };
       }),
@@ -429,6 +494,9 @@ export async function status(paseo: Paseo, workspaceId: string) {
     state,
     configured,
     routingEnabled: routing ?? true,
+    daemonAccess: access.enabled,
+    daemonAccessRevision: access.revision,
+    daemonHome: saved?.home ?? daemonHome(),
     policySource,
     raw,
     revision: policyRevision(raw),
@@ -451,7 +519,9 @@ export async function reload(
   if (agent.workspaceId !== workspaceId || !(await installation())?.entries[provider])
     throw new Error("Select a Safehouse agent in this workspace.");
   const saved = await ready(paseo, provider);
-  await loadPolicy(await workspaceCwd(paseo, workspaceId), saved.features);
+  const cwd = await workspaceCwd(paseo, workspaceId);
+  await loadPolicy(cwd, saved.features);
+  await daemonChoice(cwd);
   const current = agent as typeof agent & { reload(): Promise<unknown> };
   if (typeof current.reload !== "function")
     throw new Error("Agent reload requires Paseo 0.15.2.");

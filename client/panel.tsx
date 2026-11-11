@@ -7,6 +7,7 @@ import {
 import {
   headerLabel,
   statusRpc,
+  daemonAccessRpc,
   setupRpc,
   previewRpc,
   saveRpc,
@@ -35,6 +36,10 @@ export function SafehousePanel({
   theme,
   layout,
 }: PluginWorkspacePanelProps) {
+  const saveDaemonAccess = useRpc(daemonAccessRpc);
+  const [accessDraft, setAccessDraft] = useState(false),
+    [accessDirty, setAccessDirty] = useState(false),
+    [accessRevision, setAccessRevision] = useState("");
   const getStatus = useRpc(statusRpc),
     setup = useRpc(setupRpc),
     preview = useRpc(previewRpc),
@@ -90,6 +95,7 @@ export function SafehousePanel({
   }, [workspaceId, getStatus]);
   useEffect(() => {
     setDirty(false);
+    setAccessDirty(false);
     setReviewed(null);
     setError("");
     setMessage("");
@@ -107,6 +113,12 @@ export function SafehousePanel({
   useEffect(() => {
     if (reviewed && data && (reviewed.revision !== data.revision || data.policySource === null)) setReviewed(null);
   }, [data?.revision, data?.policySource, reviewed]);
+  useEffect(() => {
+    if (data && !accessDirty) {
+      setAccessDraft(data.daemonAccess);
+      setAccessRevision(data.daemonAccessRevision);
+    }
+  }, [data?.daemonAccessRevision, accessDirty]);
   async function action(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -206,6 +218,31 @@ export function SafehousePanel({
             {Object.entries(data.unavailable).map(([provider, reason]) => (
               <Text key={provider} selectable style={muted}>{provider}: {reason}</Text>
             ))}
+          </View>
+          <View style={{ gap: 8 }}>
+            <Pressable accessibilityRole="checkbox" accessibilityLabel="Allow Paseo daemon access"
+              accessibilityState={{ checked: accessDraft }} disabled={busy}
+              onPress={() => { setAccessDraft(!accessDraft); setAccessDirty(true); }}>
+              <Text style={text}>{accessDraft ? "☑" : "☐"} Allow Paseo daemon access</Text>
+            </Pressable>
+            <Text style={muted}>Saved: {data.daemonAccess ? "On" : "Off"}. Applies to future Safehouse processes in this workspace; ordinary agents remain ordinary.</Text>
+            <Text selectable style={muted}>Local daemon: {data.daemonHome}</Text>
+            <Text style={text}>Daemon access is all-or-none. It is not limited to this workspace or one child agent. The daemon can operate other workspaces and agents and execute outside this sandbox. Allow access only when you intend to give the agent that authority.</Text>
+            <Text style={muted}>Off blocks direct access to this local daemon from newly prepared Safehouse processes. Other services, proxy/relay routes and work already delegated to the daemon can retain authority. Native Paseo tools stay disabled; On enables CLI/API access.</Text>
+            {accessDirty && accessRevision !== data.daemonAccessRevision ? <Text style={muted}>Saved choice changed in another client. Your draft is retained.</Text> : null}
+            {button("Save daemon access", () => void action(async () => {
+              try {
+                await saveDaemonAccess({ workspaceId, enabled: accessDraft, revision: accessRevision });
+                setAccessDirty(false);
+                setMessage("Saved. Reload an existing Safehouse agent to apply this change.");
+              } catch (e) {
+                const next = await refresh();
+                setAccessRevision(next.daemonAccessRevision);
+                throw e;
+              }
+            }), !accessDirty || !data.daemonAccessRevision)}
+            <Text style={muted}>Refresh providers once for an existing installation. Saving does not restart agents. Running processes and detached descendants keep their prepared access until replaced.</Text>
+            <Text selectable style={muted}>With On, run paseo agent ls. Diagnostic: paseo agent ls --home {JSON.stringify(data.daemonHome)}</Text>
           </View>
           <Text style={muted}>
             {data.policySource === "defaults"
@@ -422,7 +459,8 @@ export function SafehousePanel({
                         {agent.preparedAt
                           ? "Policy prepared " + agent.preparedAt
                           : "No policy preparation record"}
-                        {!data.policyValid ? " · current policy unavailable" : agent.changed ? " · workspace policy changed" : ""}
+                        {` · daemon access ${agent.daemonAccess === null ? "unknown" : agent.daemonAccess ? "On" : "Off"}`}
+                        {!data.policyValid ? " · current policy unavailable" : agent.changed ? " · Changed / Reload required" : ""}
                       </Text>
                       {button(
                         "Reload " + agent.title,

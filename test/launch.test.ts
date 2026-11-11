@@ -40,7 +40,7 @@ test(
     const custom = JSON.parse((await run("/bin/sh", [script, "--protocol"], {
       cwd: root, env: { SAFEHOUSE_WORKDIR: path.join(root, "catalog") },
     })).stdout);
-    assert.deepEqual(custom.args.slice(5), [...configured, "--protocol"]);
+    assert.deepEqual(custom.args.slice(custom.args.indexOf("--") + 1), [...configured, "--protocol"]);
     await assert.rejects(fs.access(path.join(root, "forbidden")));
     await fs.writeFile(script, renderBootstrap({ root, binary, guard, executable, host: "pi" }));
     const args = ["--mode", "rpc", "$(touch should-not-exist)", "two words"];
@@ -58,6 +58,7 @@ test(
     assert.equal(catalog.cwd, "/");
     assert.equal(catalog.workdir, "");
     assert.deepEqual(catalog.args, [
+      "--env-pass=PASEO_HOME",
       "--workdir",
       "",
       "--append-profile",
@@ -83,6 +84,7 @@ test(
       (await launch(path.join(root, "catalog"))).stdout,
     );
     assert.deepEqual(configuredCatalog.args, [
+      "--env-pass=PASEO_HOME",
       "--workdir",
       "",
       "--append-profile",
@@ -101,6 +103,7 @@ test(
     assert.equal(session.cwd, await fs.realpath(root));
     assert.equal(session.workdir, snapshot);
     assert.deepEqual(session.args, [
+      "--env-pass=PASEO_HOME",
       "--trust-workdir-config",
       "--append-profile",
       guard,
@@ -201,5 +204,23 @@ test("generic ACP native and sandboxed sessions accept an empty model catalog", 
       assert.deepEqual(observed, { sandbox: id === "wrapped" ? "agent-safehouse" : null, access: id === "wrapped" ? "EPERM" : "allowed" });
       assert.equal(await session.getCurrentMode(), null);
     } finally { await session.close(); await client.shutdown?.(); }
+  }
+});
+
+test('pinned runtime disables both native catalog and internal MCP when provider tools are Off', {skip: !process.env.PASEO_RUNTIME_MODULES}, async () => {
+  const { AgentManager } = await import(pathToFileURL(path.join(process.env.PASEO_RUNTIME_MODULES!, '@getpaseo/server/dist/server/server/agent/agent-manager.js')).href);
+  for (const enabled of [false,true]) {
+    const receiver: any = {
+      paseoToolsEnabled:true, resolvePaseoToolPolicy:()=>({enabled}),
+      normalizeConfig:async(c:any)=>c, applyDaemonAppendSystemPrompt:(c:any)=>c,
+      mcpBaseUrl:'http://127.0.0.1:45678/mcp', mcpAuthToken:'fixture',
+      sessionOpenGeneration:1, detachPluginTools:()=>{}, attachedPluginTools:new Map(),sessionOpenGenerations:new Map(),
+      pluginLifecycle:{before:async(_name:string,r:any)=>r},getPluginTools:()=>[],
+      paseoToolCatalogFactory:async()=>({fixture:true}),
+    };
+    const prepared = await AgentManager.prototype.prepareSessionConfig.call(receiver,{provider:'pi',cwd:'/tmp'},'fixture');
+    assert.equal(Object.keys(prepared.launchConfig.mcpServers ?? {}).length,enabled?1:0);
+    const context = await AgentManager.prototype.buildLaunchContext.call(receiver,'fixture',{provider:'pi',capabilities:{supportsNativePaseoTools:true}},'/tmp',prepared.paseoToolPolicy,{},{});
+    assert.equal(!!context.paseoTools,enabled);
   }
 });

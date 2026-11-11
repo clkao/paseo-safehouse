@@ -1,6 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   statusRpc,
+  daemonAccessRpc,
   routingRpc,
   setupRpc,
   previewRpc,
@@ -9,6 +10,7 @@ import {
 } from "./shared/contracts";
 import {
   status,
+  setDaemonAccess,
   setWorkspaceRouting,
   setup,
   preview,
@@ -25,6 +27,9 @@ export default function contribute(server: PluginServerContext) {
   );
   server.handle(routingRpc, ({ workspaceId, enabled }, { paseo }) =>
     setWorkspaceRouting(paseo, workspaceId, enabled),
+  );
+  server.handle(daemonAccessRpc, ({ workspaceId, enabled, revision }, { paseo }) =>
+    setDaemonAccess(paseo, workspaceId, enabled, revision),
   );
   server.handle(setupRpc, (input, { paseo }) => setup(paseo, input));
   server.handle(previewRpc, async ({ workspaceId, raw }, { paseo }) =>
