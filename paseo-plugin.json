@@ -2,5 +2,6 @@
   "id": "paseo-safehouse",
   "name": "Safehouse",
   "description": "macOS workspace sandbox policies for native Paseo agents.",
+  "media": ["assets/safehouse-tab.png"],
   "requirements": { "paseo": ">=0.15.0" }
 }

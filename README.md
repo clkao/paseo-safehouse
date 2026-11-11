@@ -11,7 +11,7 @@ Install Paseo and Agent Safehouse on the Mac that runs the Paseo daemon.
 Then install this plugin:
 
 ```sh
-paseo plugin install https://github.com/clkao/paseo-safehouse
+paseo plugin install https://github.com/spacedock-dev/paseo-safehouse
 ```
 
 Open the **Safehouse** panel.
