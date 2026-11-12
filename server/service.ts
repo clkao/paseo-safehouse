@@ -7,6 +7,8 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import { homedir } from "node:os";
 import { isDeepStrictEqual } from "node:util";
+import type { z } from "zod";
+import type { availabilitySchema } from "../shared/contracts";
 import { renderBootstrap } from "./launch";
 import { finishPending, savePending, serializeSetup, validateInstallation } from "./setup";
 import { configuredProvider, launchError, type ProviderConfig } from "./providers";
@@ -193,6 +195,30 @@ async function effectivePolicy(policy: ResolvedPolicy, enabled: boolean, saved: 
 }
 export async function installation() {
   return readJson<Installation>(path.join(stateRoot(), "installation.json"));
+}
+async function executableAvailability(saved: Installation | null): Promise<
+  z.infer<typeof availabilitySchema> & { binary: string | null }
+> {
+  if (process.platform !== "darwin") return {
+    availability: "unsupported", availabilityError: "A macOS daemon host is required.", binary: null,
+  };
+  const binary = (saved && path.isAbsolute(saved.binary) ? await findExecutable(saved.binary) : null)
+    ?? await findExecutable("safehouse");
+  if (!binary) return { availability: "missing", binary: null,
+    availabilityError: "Safehouse was not found on the daemon Mac. Install it and check the daemon's PATH.",
+  };
+  try {
+    await capabilities(binary);
+    return { availability: "available", availabilityError: null, binary };
+  } catch (e) {
+    return { availability: "unusable", binary,
+      availabilityError: `Safehouse could not run on the daemon Mac: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
+export async function availability() {
+  const { binary: _binary, ...result } = await executableAvailability(await installation());
+  return result;
 }
 export async function setup(
   paseo: Paseo,
@@ -463,6 +489,7 @@ export async function status(paseo: Paseo, workspaceId: string) {
     error = e instanceof Error ? e.message : String(e);
   }
   const policyValid = !!policy;
+  const executable = await executableAvailability(saved);
   let configured = !!saved;
   if (saved) {
     const providers = (await paseo.config.get()).config.providers ?? {};
@@ -474,11 +501,14 @@ export async function status(paseo: Paseo, workspaceId: string) {
         isDeepStrictEqual(providers[source.base] ?? null, source.baseSource)));
     });
   }
+  configured = configured && executable.availability === "available" && executable.binary === saved?.binary;
   const supported = process.platform === "darwin";
-  const state: "unsupported" | "setup" | "absent" | "invalid" | "ready" | "off" =
+  const state: "unsupported" | "unavailable" | "setup" | "absent" | "invalid" | "ready" | "off" =
     !supported
       ? "unsupported"
-      : routingError
+      : executable.availability !== "available"
+        ? "unavailable"
+        : routingError
         ? "invalid"
         : routing === false
           ? "off"
@@ -510,6 +540,8 @@ export async function status(paseo: Paseo, workspaceId: string) {
   return {
     cwd,
     platform: process.platform,
+    availability: executable.availability,
+    availabilityError: executable.availabilityError,
     state,
     configured,
     routingEnabled: routing ?? true,

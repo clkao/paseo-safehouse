@@ -57,13 +57,32 @@ The selection applies across clients until changed. It leaves policy bytes and r
 The daemon stores one atomic record per canonical workspace beneath protected `safehouse/workspaces/` state.
 Malformed records block creation. Disable requires a resolvable workspace but does not parse the policy.
 Explicit enable persists without a policy. New launches then use defaults.
-An explicit off choice takes precedence in the header. The panel still reports policy errors.
+Executable availability takes precedence over the saved routing choice in the header. The panel reports both the saved choice and policy errors.
 Existing Safehouse agents use the current file or defaults on resume, regardless of automatic routing.
 When current policy resolution fails, receipts retain their preparation status and show that the current policy is unavailable.
 
 Known limitation: the header context identifies a workspace, not a draft.
 All clients share the selection, so a concurrent launch can observe the same choice.
 It cannot target one particular next draft. A draft-specific choice requires an upstream creation-form hook.
+
+## Executable availability
+
+The host-only `safehouse.availability` RPC takes no workspace input.
+Workspace status uses the same read-only probe and retains its required workspace identity.
+Both report available, missing, unusable, or unsupported. Missing and unusable produce the workspace state `unavailable`.
+The probe checks the saved absolute executable first, then the daemon PATH if that path is inaccessible.
+It runs the existing bounded help command to require policy support. Non-macOS hosts skip the executable probe.
+A saved executable that fails its help check remains unusable until repaired or explicitly replaced through provider refresh.
+
+A usable saved path remains available outside PATH.
+A replacement at another path requires **Refresh providers** before the saved launchers are configured.
+Detection preserves installation records, policies, workspace choices, receipts, and running agents.
+The panel retains unsaved edits during polling and **Check again**.
+
+On Paseo 0.15, **Safehouse unavailable** opens the existing panel directly.
+The panel supplies daemon-Mac installation instructions, an official link, and **Check again**.
+The separate composer integration supplies the Paseo 0.16 entry point and retains the header fallback on older hosts.
+The generic composer has no workspace identity. Its host guidance links to installation instructions without choosing a workspace tab.
 
 ## Launch architecture
 
