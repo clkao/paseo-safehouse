@@ -1,0 +1,16 @@
+Agent Safehouse icon
+
+Source project: https://github.com/eugene1g/agent-safehouse
+Source: https://github.com/eugene1g/agent-safehouse/blob/ba86945873690a4cc4e661c6c56355f3fabd9473/docs/public/favicon.svg
+Source SHA-256: 6d09113488759bfdb4ca15ee72fe99f17c6fc941a5c3170ad841c729777365d7
+License: Apache-2.0; see agent-safehouse-LICENSE.txt in this directory.
+License source: https://github.com/eugene1g/agent-safehouse/blob/ba86945873690a4cc4e661c6c56355f3fabd9473/LICENSE
+License SHA-256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+
+Converted from SVG to a transparent 256 x 256 PNG; artwork unchanged.
+Rasterizer: rsvg-convert 2.62.3 (librsvg).
+Command: rsvg-convert -w 256 -h 256 upstream.svg -o safehouse-icon.png
+The PNG Description text metadata also records this conversion notice.
+
+Attribution identifies the artwork source; no upstream endorsement is claimed.
+Apache-2.0 does not grant trademark rights.
