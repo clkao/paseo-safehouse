@@ -218,7 +218,7 @@ export function SafehousePanel({
               <Text style={text}>Install or repair Agent Safehouse on the Mac that runs the Paseo daemon.</Text>
               <Text selectable style={muted}>{data.availabilityError}</Text>
               <Text selectable style={text}>brew install eugene1g/safehouse/agent-safehouse</Text>
-              <Text style={muted}>The daemon must find safehouse through its PATH. A terminal can use a different PATH. After installation, select Check again, then Refresh providers.</Text>
+              <Text style={muted}>The daemon must find safehouse through its PATH. A terminal can use a different PATH. After changing the daemon's PATH, relaunch the daemon through its normal launcher so it receives the new environment. Then select Check again and Refresh providers.</Text>
               {button("Installation instructions", () => void action(async () => { await openExternalUrl(installationUrl); }))}
             </> : !data.configured ? <Text style={muted}>Safehouse is available. Select Refresh providers to configure its current executable path.</Text> : null}
             <Text style={muted}>Automatic Safehouse: {data.routingEnabled ? "On" : "Off"}. Detection keeps this saved choice and existing agents unchanged.</Text>
