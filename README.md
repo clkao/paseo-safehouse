@@ -14,8 +14,15 @@ Then install this plugin:
 paseo plugin install https://github.com/spacedock-dev/paseo-safehouse
 ```
 
-Open the **Safehouse** panel.
-Select **Refresh providers**.
+If Safehouse is missing, select **Safehouse unavailable** in the workspace header to open the panel.
+The panel links to the [official installation instructions](https://github.com/eugene1g/agent-safehouse#install).
+Install Agent Safehouse on the daemon Mac with `brew install eugene1g/safehouse/agent-safehouse`.
+The daemon must find `safehouse` through its PATH. A terminal can use a different PATH.
+
+In the **Safehouse** panel, select **Check again**.
+Then select **Refresh providers**.
+Detection preserves saved choices, unsaved panel edits, and existing agents.
+If the executable moves, refresh the providers to update their saved path.
 
 ## Use
 

@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
   useRpc,
+  openExternalUrl,
   type PluginWorkspacePanelProps,
 } from "@getpaseo/plugin/client";
 import {
   headerLabel,
+  installationUrl,
   statusRpc,
   daemonAccessRpc,
   setupRpc,
@@ -211,10 +213,20 @@ export function SafehousePanel({
       ) : (
         <>
           <View style={{ gap: 8 }}>
+            {data.availability !== "available" ? <>
+              <Text style={text}>Install or repair Agent Safehouse on the Mac that runs the Paseo daemon.</Text>
+              <Text selectable style={muted}>{data.availabilityError}</Text>
+              <Text selectable style={text}>brew install eugene1g/safehouse/agent-safehouse</Text>
+              <Text style={muted}>The daemon must find safehouse through its PATH. A terminal can use a different PATH. After installation, select Check again, then Refresh providers.</Text>
+              {button("Installation instructions", () => void action(async () => { await openExternalUrl(installationUrl); }))}
+            </> : !data.configured ? <Text style={muted}>Safehouse is available. Select Refresh providers to configure its current executable path.</Text> : null}
+            <Text style={muted}>Automatic Safehouse: {data.routingEnabled ? "On" : "Off"}. Detection keeps this saved choice and existing agents unchanged.</Text>
+            {button("Check again", () => void action(async () => {}))}
             {button("Refresh providers", () => void action(async () => {
               await setup({});
               setMessage("Safehouse providers refreshed.");
-            }))}
+            }), data.availability !== "available")}
+            {data.availability === "available" ? <Text style={muted}>Refresh providers uses the daemon's PATH. Keep safehouse on that PATH even if the saved executable still works.</Text> : null}
             {Object.entries(data.unavailable).map(([provider, reason]) => (
               <Text key={provider} selectable style={muted}>{provider}: {reason}</Text>
             ))}

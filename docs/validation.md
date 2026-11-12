@@ -16,7 +16,7 @@ The lifecycle acceptance task is `23763z202asrmv8c7kmxjxgx`.
 | Workspace isolation       | Concurrent agents retain separate policies. Unrelated workspaces and existing sessions retain their behavior.                                                    |
 | Discovery                 | Variant catalogs load under Safehouse without workspace access. Native harness configuration supplies extension models. Discovery never borrows workspace grants. |
 | Failure handling          | Missing or invalid bootstrap environment, provider collisions, and unavailable Safehouse produce errors without a host fallback.                                 |
-| Status                    | Concise header states distinguish On, Off, Setup, and Error. Agent indicators distinguish policy preparation from runtime evidence.                              |
+| Status                    | Concise header states distinguish On, Off, Setup, Error, and Unavailable. Agent indicators distinguish policy preparation from runtime evidence.                              |
 | Process supervision       | Native resume preserves conversation history and applies the current policy.                                                                         |
 | Provider modes            | Claude uses bypassPermissions and Codex uses Full Access without normal command approvals. Pi retains its native behavior. Safehouse restrictions remain active. Saved Off preserves ordinary requests.    |
 | Platform                  | Non-macOS hosts cannot configure or launch Safehouse variants.                                                                                                   |
@@ -122,3 +122,23 @@ Use a disposable plugin copy and workspace when those paths otherwise overlap.
 The direct-address case must fail at the network boundary, not merely during credential discovery.
 Neither state exposes built-in Paseo tools. Existing third-party tools retain their separate authority.
 Subprocess checks do not establish the rendered panel or conversation experience.
+
+## Installation guidance acceptance
+
+`test/availability.test.ts` covers missing, removed, restored, non-executable, incompatible, failing, and timed-out executables.
+It checks saved paths outside PATH and replacements that require provider refresh.
+Repeated detection preserves protected record bytes and agent identity. Throwing mutation stubs reject unintended writes through Paseo.
+The host-only RPC works when workspace lookup is unavailable. Unsupported hosts remain distinct from policy errors and setup requirements.
+
+Use a disposable executable path on an isolated daemon for the rendered journey.
+On Paseo 0.15, open the panel with one click on **Safehouse unavailable** before setup.
+Open the official instructions and read the daemon-Mac and PATH guidance.
+Restore the fixture executable, select **Check again**, then select **Refresh providers**.
+Remove and restore only the fixture path after setup. Keep unsaved edits and an existing agent throughout the exercise.
+Check saved choices, drafts, agent identity, provider, receipt, and process continuity after polling and retry.
+Check normal and compact layouts.
+
+Coordinate the Paseo 0.16 drive with the composer integration candidate.
+Check existing-workspace and new-workspace composers, the official link, and absence of a duplicate header.
+Use normal workspace navigation for the full panel recovery journey.
+Record the exact runtime and candidate commits. Keep joint evidence pending until that drive is complete.

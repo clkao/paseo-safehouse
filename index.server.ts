@@ -1,6 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   statusRpc,
+  availabilityRpc,
   daemonAccessRpc,
   routingRpc,
   setupRpc,
@@ -10,6 +11,7 @@ import {
 } from "./shared/contracts";
 import {
   status,
+  availability,
   setDaemonAccess,
   setWorkspaceRouting,
   setup,
@@ -22,6 +24,7 @@ import {
 } from "./server/service";
 
 export default function contribute(server: PluginServerContext) {
+  server.handle(availabilityRpc, () => availability());
   server.handle(statusRpc, ({ workspaceId }, { paseo }) =>
     status(paseo, workspaceId),
   );
