@@ -142,3 +142,20 @@ Coordinate the Paseo 0.16 drive with the composer integration candidate.
 Check existing-workspace and new-workspace composers, the official link, and absence of a duplicate header.
 Use normal workspace navigation for the full panel recovery journey.
 Record the exact runtime and candidate commits. Keep joint evidence pending until that drive is complete.
+
+## Compact composer choice
+
+Use the existing isolated Paseo 0.16.0-beta.2 fixture for the mounted control.
+Check On/Off and the Lock icon at wide and narrow widths. Check installation guidance with an unavailable executable.
+With the workspace default Off, open fresh workspace and New workspace drafts.
+Check that visible On has true metadata, then send and read the created provider and preparation receipt.
+Choose Off and cause a failed submission. Check that retry retains false metadata.
+After a successful submission, check that the next draft starts On and a sibling draft retains its choice.
+Cause locked and rejected initialization. Check neutral or error feedback and explicit retry without repeated automatic writes.
+Open a prepared session's indicator while another workspace has focus. Check the panel target against its status RPC.
+Check ordinary sessions have no sandbox-on indicator and changed, unknown, and unavailable details remain available.
+
+Run the existing compiler-backed composer test with `PASEO_RUNTIME_MODULES`, plus typecheck and the full test suite.
+The composer test covers explicit initialization, false preservation, reset, rejection, cleanup, fixed providers, and old/mixed-host registration.
+Launch and policy tests preserve absent-metadata fallback and existing session identity.
+Record mounted observations separately from offline test results. Independent validation must reproduce the mounted candidate behavior.

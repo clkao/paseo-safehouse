@@ -28,12 +28,14 @@ If the executable moves, refresh the providers to update their saved path.
 ## Use
 
 1. Select your workspace, provider, and model.
-2. On Paseo 0.16, choose **Workspace default**, **On**, or **Off** in the Safehouse composer control. The choice applies to that draft, including the first agent in a new workspace.
+2. On Paseo 0.16, choose **On** or **Off** beside the lock in the Safehouse composer.
+   Each fresh draft starts On, including the first agent in a new workspace.
 3. Start the agent. On Paseo 0.15, use the workspace header to change the default for future agents.
 
-**Workspace default** uses the saved workspace choice, or On when no choice is saved.
-The composer cannot preview that inherited value. Explicit On and Off leave the workspace default unchanged.
-CLI callers without draft metadata also use the workspace default.
+The composer shows On only after the draft contains an explicit choice.
+If initialization fails, use **Retry Safehouse choice**. An Off choice remains Off through a failed submission.
+After a successful submission, the next fresh draft starts On. Draft choices leave the saved workspace default unchanged.
+Paseo 0.15 and callers without draft metadata use the workspace default, or On when no choice is saved.
 Open the **Safehouse** panel to view and change that workspace default on either version.
 A beta client connected to a 0.15 daemon uses the workspace header.
 Without `.safehouse`, the workspace is writable and Safehouse supplies its built-in system, toolchain, network, temporary-directory, and harness access.
