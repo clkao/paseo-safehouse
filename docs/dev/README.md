@@ -54,6 +54,7 @@ Current work covers three user outcomes:
 3. The Paseo 0.16 composer offers a Safehouse choice for each new-agent draft, including a new workspace's first agent.
 
 The composer task must prove metadata transport and compatibility before implementation approval.
+Paseo 0.16 uses the composer control. Paseo 0.15 retains the workspace header widget.
 Existing agents retain their sandbox identity. The workspace choice remains the default for callers without a draft choice.
 Task designs define file limits, acceptance criteria, and independent validation. Shared-file integration follows reviewed dependency order.
 
