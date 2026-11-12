@@ -416,7 +416,7 @@ export async function routeCreation(
               approval_policy: "never",
             },
           }
-        : {}),
+        : host === "claude" ? { modeId: "bypassPermissions" } : {}),
     },
   };
 }
