@@ -264,7 +264,7 @@ for (const change of ["removed", "unwrappable"]) {
     assert.deepEqual((await f.get()).providers.pi, changed.providers.pi);
     assert.deepEqual((await f.get()).providers.peer, changed.providers.peer);
     assert.equal((await status(f.host, "workspace")).configured, true);
-    const opening = (provider: string) => ({ provider, cwd: f.dir, agentId: "resume", reason: "resume", workspaceId: null, purpose: "interactive", title: null, labels: {}, env: {}, tools: [], mcpServers: {} }) as Parameters<typeof prepareOpening>[0];
+    const opening = (provider: string) => ({ provider, cwd: f.dir, agentId: "resume", reason: "resume", workspaceId: null, purpose: "interactive", background: false, metadata: {}, title: null, labels: {}, env: {}, tools: [], mcpServers: {} }) as Parameters<typeof prepareOpening>[0];
     await assert.rejects(prepareOpening(opening("safehouse-custom"), f.host), /unavailable/);
     assert.ok((await prepareOpening(opening("safehouse-pi"), f.host)).env.SAFEHOUSE_WORKDIR);
     await assert.rejects(fs.access(path.join(f.root, "setup-pending.json")), { code: "ENOENT" });
