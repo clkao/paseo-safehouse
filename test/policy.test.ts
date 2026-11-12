@@ -260,7 +260,7 @@ test(
         }
       }
     }
-    for (const provider of ["pi", "claude", variant("pi"), variant("claude")]) {
+    for (const provider of ["pi", variant("pi")]) {
       const providerOptions = { sandbox_mode: "read-only", approval_policy: "untrusted", features: { example: true } };
       const result = await routeCreation(
         { config: { cwd: workspaces[0], provider, modeId: "auto", model: "fixture/model", providerOptions } }, paseo,
@@ -268,6 +268,19 @@ test(
       assert.equal(result.config.modeId, "auto");
       assert.equal(result.config.providerOptions, providerOptions);
       assert.deepEqual(result.config.providerOptions, { sandbox_mode: "read-only", approval_policy: "untrusted", features: { example: true } });
+    }
+    for (const provider of ["claude", variant("claude")]) {
+      for (const modeId of [undefined, "default", "plan", "acceptEdits", "auto", "bypassPermissions"]) {
+        const providerOptions = { allowedTools: ["Read"], disallowedTools: ["WebFetch"] };
+        const request = { config: { cwd: workspaces[0], provider, modeId, model: "fixture/model", providerOptions } };
+        const original = structuredClone(request);
+        const result = await routeCreation(request, paseo);
+        assert.equal(result.config.modeId, "bypassPermissions");
+        assert.equal(result.config.provider, variant("claude"));
+        assert.equal(result.config.model, "fixture/model");
+        assert.deepEqual(result.config.providerOptions, providerOptions);
+        assert.deepEqual(request, original);
+      }
     }
     const codexRequest = {
       config: {
@@ -298,6 +311,13 @@ test(
     const originalProviders = JSON.stringify(entries);
     const originalPolicy = await fs.readFile(path.join(workspaces[0], ".safehouse"), "utf8");
     await setWorkspaceRouting(paseo, workspaces[0], false);
+    for (const provider of ["claude", "codex", "pi"]) {
+      const ordinary = { config: { cwd: workspaces[0], provider, modeId: "default", model: "fixture/model", providerOptions: { keep: true } } };
+      assert.equal(await routeCreation(ordinary, paseo), ordinary);
+      const explicit = await routeCreation({ config: { ...ordinary.config, provider: variant(provider) } }, paseo);
+      assert.equal(explicit.config.provider, variant(provider));
+      assert.equal(explicit.config.modeId, provider === "claude" ? "bypassPermissions" : provider === "codex" ? "full-access" : "default");
+    }
     const alias = path.join(base, "alias");
     await fs.symlink(workspaces[0], alias);
     assert.equal((await status(paseo, alias)).routingEnabled, false);
@@ -574,6 +594,7 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
     custom: { extends: "copilot", label: "Custom", env: { CUSTOM: "yes" }, disallowedTools: ["custom-tool"], models: [{ id: "fixture", label: "Fixture" }] },
     generic: { extends: "acp", label: "Generic", command: [process.execPath, "quote's", "$(touch forbidden)"] },
     plugin: { command: [process.execPath] },
+    customClaude: { extends: "claude", command: [process.execPath], label: "Custom Claude" },
   };
   const originals = JSON.parse(JSON.stringify(providers));
   const paseo = {
@@ -591,6 +612,16 @@ test("setup wraps configured providers, preserves ordinary entries and rejects d
   assert.equal(providers["safehouse-plugin"], undefined);
   await fs.writeFile(path.join(base, ".safehouse"), "");
   const request = { config: { cwd: base, provider: "custom", model: "fixture", modeId: "auto", providerOptions: { own: true } } };
+  for (const provider of ["customClaude", "safehouse-customClaude"]) {
+    const original = { config: { ...request.config, provider, providerOptions: { disallowedTools: ["WebFetch"] } } };
+    const before = structuredClone(original);
+    const routed = await routeCreation(original, paseo);
+    assert.equal(routed.config.provider, "safehouse-customClaude");
+    assert.equal(routed.config.modeId, "bypassPermissions");
+    assert.equal(routed.config.model, "fixture");
+    assert.deepEqual(routed.config.providerOptions, original.config.providerOptions);
+    assert.deepEqual(original, before);
+  }
   const modelLess = await routeCreation({ config: { cwd: base, provider: "generic" } }, paseo);
   assert.equal(modelLess.config.provider, "safehouse-generic");
   assert.equal(modelLess.config.model, undefined);

@@ -18,7 +18,7 @@ The lifecycle acceptance task is `23763z202asrmv8c7kmxjxgx`.
 | Failure handling          | Missing or invalid bootstrap environment, provider collisions, and unavailable Safehouse produce errors without a host fallback.                                 |
 | Status                    | Concise header states distinguish On, Off, Setup, and Error. Agent indicators distinguish policy preparation from runtime evidence.                              |
 | Process supervision       | Native resume preserves conversation history and applies the current policy.                                                                         |
-| Provider modes            | Codex launches through Safehouse automatically use Full Access and remain restricted by Safehouse. Ordinary launches with a saved Off choice and other providers retain their modes.    |
+| Provider modes            | Claude uses bypassPermissions and Codex uses Full Access without normal command approvals. Pi retains its native behavior. Safehouse restrictions remain active. Saved Off preserves ordinary requests.    |
 | Platform                  | Non-macOS hosts cannot configure or launch Safehouse variants.                                                                                                   |
 
 The plugin’s absence prevents automatic routing enforcement. This is an explicit boundary, not a passing failure-handling result.
@@ -58,8 +58,12 @@ Acceptance requires:
 6. Source policy bytes preserved unless the user edits access.
 7. A native resume that retains a conversation marker and repeats the sandbox checks.
 8. An independent conversation that remains available throughout the test.
+9. New Claude agents use `bypassPermissions` through ordinary and explicit Safehouse selections, without normal command permission events.
+10. Codex uses Full Access with `approval_policy: never`. Pi exposes no selectable mode or normal built-in command approval flow.
+11. Reload retains each new agent's mode, provider, native conversation handle, and access limits.
+12. A pre-change Claude baseline requests approval. Cancel it without approval before the fixed comparison.
 
-Claude and Codex require the same evidence through their own launch paths.
+Claude, Codex, and Pi require the same boundary evidence through their own launch paths.
 Chat success alone does not establish sandbox enforcement.
 
 ## Repeatable probes

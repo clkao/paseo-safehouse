@@ -224,3 +224,50 @@ test('pinned runtime disables both native catalog and internal MCP when provider
     assert.equal(!!context.paseoTools,enabled);
   }
 });
+
+test("Claude bypass and Pi native modes survive actual adapter create and resume", { skip: !process.env.PASEO_RUNTIME_MODULES }, async (t) => {
+  const root = path.join(process.env.PASEO_RUNTIME_MODULES!, "@getpaseo/server/dist/server/server/agent/providers");
+  const { ClaudeAgentClient } = await import(pathToFileURL(path.join(root, "claude/agent.js")).href);
+  const { ClaudeProviderOptionsSchema } = await import(pathToFileURL(path.join(root, "claude/options.js")).href);
+  const { PiRpcAgentClient, PiProviderOptionsSchema } = await import(pathToFileURL(path.join(root, "pi/agent.js")).href);
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "safehouse-modes-"));
+  t.after(() => fs.rm(cwd, { recursive: true, force: true }));
+  const logger = { child() { return this; }, info() {}, debug() {}, warn() {}, error() {}, trace() {} };
+  const claude = new ClaudeAgentClient({ logger, runtimeSettings: { env: { CLAUDE_CONFIG_DIR: cwd } }, resolveBinary: async () => "/fixture/claude" });
+  for (const modeId of ["bypassPermissions", "default"]) {
+    const config = { provider: "claude", cwd, modeId, providerOptions: { disallowedTools: ["WebFetch"] } };
+    const handle = "00000000-0000-4000-8000-000000000008";
+    for (const resumed of [false, true]) {
+      const session = resumed ? await claude.resumeSession({ provider: "claude", sessionId: handle, metadata: config }, config) : await claude.createSession(config);
+      try {
+        assert.equal(await session.getCurrentMode(), modeId);
+        const sdk = await session.buildOptions(await session.getCurrentMode());
+        assert.equal(sdk.permissionMode, modeId);
+        assert.equal(sdk.allowDangerouslySkipPermissions, true);
+        assert.deepEqual(sdk.disallowedTools, ["WebFetch"]);
+        assert.equal(sdk.resume, resumed ? handle : undefined);
+      } finally { await session.close(); }
+    }
+  }
+  for (const key of ["permissionMode", "allowDangerouslySkipPermissions"])
+    assert.equal(ClaudeProviderOptionsSchema.safeParse({ [key]: key === "permissionMode" ? "bypassPermissions" : true }).success, false);
+  const calls: any[] = [];
+  const state = { sessionId: "fixture", sessionFile: path.join(cwd, "native.jsonl"), thinkingLevel: "medium", model: { provider: "fixture", id: "model" } };
+  const runtime = { async startSession(input: any) { calls.push(input); return { getState: async () => state, onEvent() {}, close: async () => {}, getSessionStats: async () => ({}) }; } };
+  const pi = new PiRpcAgentClient({ logger, runtime });
+  const config = { provider: "pi", cwd, model: "fixture/model", providerOptions: { rpcTimeoutMs: 5000 } };
+  const created = await pi.createSession(config);
+  const resumed = await pi.resumeSession(created.describePersistence(), config);
+  try {
+    for (const session of [created, resumed]) {
+      assert.deepEqual(await session.getAvailableModes(), []);
+      assert.equal(await session.getCurrentMode(), null);
+      await assert.rejects(session.setMode("bypassPermissions"), /does not expose selectable modes/);
+    }
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].session, state.sessionFile);
+    for (const call of calls) assert.equal("modeId" in call, false);
+    for (const key of ["permissionMode", "approval_policy"])
+      assert.equal(PiProviderOptionsSchema.safeParse({ [key]: "never" }).success, false);
+  } finally { await created.close(); await resumed.close(); }
+});

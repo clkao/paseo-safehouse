@@ -243,17 +243,24 @@ Supported session launches require the opening hook, which validates the workspa
 
 ### Provider permission modes
 
-Pi and Claude retain the selected permission mode. Claude retains its normal tool approval prompts.
+For Claude, the creation hook selects `modeId: bypassPermissions` after provider and policy validation.
+Paseo 0.15.3 maps this mode to SDK `permissionMode: bypassPermissions` and supplies `allowDangerouslySkipPermissions: true`.
+These SDK keys are not valid Claude `providerOptions`.
+This applies to ordinary Claude selections, explicit Safehouse variants, and supported direct Claude derivatives.
+Pi has no selectable permission mode. Its built-in tools run without a normal command approval flow.
+Pi configuration remains unchanged. Extensions and custom hooks can retain their own controls.
 For Codex, the creation hook selects **Full Access** after provider and policy validation.
 It copies `providerOptions` and sets `sandbox_mode: danger-full-access` and `approval_policy: never`.
 These explicit values override conflicting request configuration and provider defaults, which take precedence over the selected mode.
 Safehouse enforces the outer process boundary. Codex does not create an inner sandbox or request tool approvals.
 Other provider options and the selected model remain intact. The hook does not mutate the caller’s request.
-Ordinary Codex launches with a saved Off choice retain their selected mode and provider options.
+Explicit tool restrictions remain intact.
+Ordinary launches with a saved Off choice retain their selected mode and provider options.
 
-Paseo stores the explicit values with each new managed session and supplies them during native resume.
+Paseo stores the normalized Claude mode and Codex values with each new managed session and supplies them during native resume.
 The opening hook validates the current workspace policy and prepares the outer sandbox snapshot.
-Resume support covers sessions created with this normalization. Existing or imported sessions with conflicting stored options require a separate migration design.
+Resume support covers sessions created with this normalization. Existing and imported sessions retain their stored settings.
+The opening hook cannot change permission modes or provider options. Stored-session migration requires a separate design.
 
 ### Reload and resume
 

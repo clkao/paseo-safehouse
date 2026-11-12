@@ -28,6 +28,12 @@ Without `.safehouse`, the workspace is writable and Safehouse supplies its built
 Plugin protections still apply. No extra directory grants, optional capabilities, or custom profiles apply.
 Enabling Safehouse does not create a policy file.
 
+New Safehouse Claude agents use `bypassPermissions`. New Safehouse Codex agents use Full Access with approvals disabled.
+Normal commands run without harness approval prompts. Safehouse still enforces the process limits.
+Pi has no selectable permission mode. Its built-in tools already run without this approval flow.
+Extensions and custom hooks can ask questions or apply their own controls.
+Existing and imported sessions retain their stored permission settings. Reload preserves the settings of newly created agents.
+
 To change access:
 
 1. Open the **Safehouse** panel.
