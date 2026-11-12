@@ -37,13 +37,19 @@ Paseo 0.16 supplies a per-draft Safehouse Select in workspace and New workspace 
 **Workspace default** removes the draft override; **On** and **Off** set a boolean `paseo-safehouse.launch` agent metadata key.
 The public composer context has no workspace identity. The control therefore does not claim an effective inherited On/Off value.
 The server resolves the canonical directory's saved choice at creation, defaulting to On.
-Only absent or boolean metadata is accepted; malformed present values reject creation.
+Only absent or boolean metadata is accepted; malformed present values, including raw null, reject creation.
+The SDK removes the key when `setMetadata` receives null; it does not send that null as a choice.
+An explicit boolean skips the inherited routing record, including a malformed record; Workspace default requires a valid saved record.
 Explicit owned Safehouse providers always remain On, and existing agents retain their stored provider on reload regardless of mutable metadata.
 Each draft owns its metadata. Paseo resets the consumed draft after successful submission and retains it on retry.
 
 The client registers the composer only when `addComposerItem`, `useComposer`, `Select`, and the daemon's metadata capability are present.
 Namespace imports preserve compatibility with older SDK exports. The minimum Paseo version remains 0.15.
-A capable client and daemon show no workspace header. Older and mixed hosts retain this header:
+The existing 5-second refresh retries capability discovery; an RPC failure keeps the fallback header until discovery succeeds.
+Missing or unusable executable results still carry the metadata capability and owned provider IDs.
+Compatibility and metadata transport are verified on Paseo 0.15.3 and 0.16.0-beta.2, not on other runtime versions.
+A capable client and daemon show no workspace header. The Safehouse panel displays and edits the workspace default on both versions.
+Older and mixed hosts retain this header:
 
 | Workspace state                     | Header                | Action                       |
 | ----------------------------------- | --------------------- | ---------------------------- |

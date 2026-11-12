@@ -34,6 +34,7 @@ If the executable moves, refresh the providers to update their saved path.
 **Workspace default** uses the saved workspace choice, or On when no choice is saved.
 The composer cannot preview that inherited value. Explicit On and Off leave the workspace default unchanged.
 CLI callers without draft metadata also use the workspace default.
+Open the **Safehouse** panel to view and change that workspace default on either version.
 A beta client connected to a 0.15 daemon uses the workspace header.
 Without `.safehouse`, the workspace is writable and Safehouse supplies its built-in system, toolchain, network, temporary-directory, and harness access.
 Plugin protections still apply. No extra directory grants, optional capabilities, or custom profiles apply.
@@ -95,6 +96,9 @@ Off blocks direct access to captured local daemon endpoints and daemon homes, ev
 It does not revoke work already delegated to the daemon. Other services and proxy/relay routes can retain authority.
 Running processes and detached descendants keep their prepared access until replaced.
 Custom profiles can still restrict access with On.
+
+Composer transport and compatibility are checked on Paseo 0.16.0-beta.2 and 0.15.3.
+Other runtime versions have not been verified.
 
 ## Development
 

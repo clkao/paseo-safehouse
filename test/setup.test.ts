@@ -359,6 +359,11 @@ test("draft metadata routes independently without changing workspace defaults or
   for (const value of [null, "false", "true", 0, 1, [], {}, { enabled: false }])
     await assert.rejects(route({ "paseo-safehouse.launch": value }), /paseo-safehouse.launch.*boolean/);
   assert.deepEqual(await Promise.all(records.map(file => fs.readFile(path.join(f.root, "workspaces", file), "utf8"))), bytes);
+  await fs.writeFile(path.join(f.root, "workspaces", records[0]), "invalid record");
+  await assert.rejects(route(), /routing state is unreadable or invalid/);
+  assert.equal((await route({ "paseo-safehouse.launch": false })).config.provider, "pi");
+  assert.equal((await route({ "paseo-safehouse.launch": true })).config.provider, "safehouse-pi");
+  await fs.writeFile(path.join(f.root, "workspaces", records[0]), bytes[0]);
   await assert.rejects(fs.access(path.join(f.dir, ".safehouse")), { code: "ENOENT" });
   const opening = { provider: "safehouse-pi", cwd: f.dir, agentId: "protected", reason: "resume", workspaceId: null,
     purpose: "interactive", background: false, metadata: { "paseo-safehouse.launch": false }, title: null, labels: {}, env: {}, tools: [], mcpServers: {} } as Parameters<typeof prepareOpening>[0];
