@@ -143,8 +143,10 @@ test(
         label: "Claude · Safehouse",
       },
     };
+    const binary = path.join(await fs.realpath(base), "safehouse");
+    await fs.writeFile(binary, "#!/bin/sh\nprintf 'Fixture\\nSupported values: ssh\\n--trust-workdir-config\\n'\n", { mode: 0o700 });
     await atomicJson(path.join(root, "installation.json"), {
-      binary: "/fixture/safehouse",
+      binary,
       features: [],
       version: "test",
       home: canonicalHome,

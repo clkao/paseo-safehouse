@@ -1,13 +1,24 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 const workspace = z.object({ workspaceId: z.string().min(1) });
+export const availabilitySchema = z.object({
+  availability: z.enum(["available", "missing", "unusable", "unsupported"]),
+  availabilityError: z.string().nullable(),
+});
+export const availabilityRpc = defineRpc({
+  name: "safehouse.availability",
+  input: z.object({}),
+  output: availabilitySchema,
+});
+export const installationUrl = "https://github.com/eugene1g/agent-safehouse#install";
 export const statusRpc = defineRpc({
   name: "safehouse.status",
   input: workspace,
   output: z.object({
+    ...availabilitySchema.shape,
     cwd: z.string(),
     platform: z.string(),
-    state: z.enum(["unsupported", "setup", "absent", "invalid", "ready", "off"]),
+    state: z.enum(["unsupported", "unavailable", "setup", "absent", "invalid", "ready", "off"]),
     configured: z.boolean(),
     routingEnabled: z.boolean(),
     daemonAccess: z.boolean(),
@@ -83,5 +94,6 @@ export const headerLabel = (state: string) =>
     absent: "Safehouse Off",
     off: "Safehouse Off",
     unsupported: "Safehouse unavailable",
+    unavailable: "Safehouse unavailable",
     setup: "Safehouse setup",
   })[state] ?? "Safehouse checking";

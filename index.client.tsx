@@ -91,7 +91,7 @@ export default function contribute(client: PluginClientContext) {
           const status = await client.rpc(statusRpc, { workspaceId: id });
           if (disposed) return;
           const label = headerLabel(status.state);
-          headers.get(id)!.update({ title: label, label, behavior: menu(id, status.routingEnabled) });
+          headers.get(id)!.update({ title: label, label, behavior: status.state === "unavailable" || status.state === "unsupported" ? behavior : menu(id, status.routingEnabled) });
           for (const agent of status.agents) {
             seenAgents.add(agent.id);
             const label = agent.preparedAt
