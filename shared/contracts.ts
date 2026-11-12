@@ -8,7 +8,10 @@ export const availabilitySchema = z.object({
 export const availabilityRpc = defineRpc({
   name: "safehouse.availability",
   input: z.object({}),
-  output: availabilitySchema,
+  output: availabilitySchema.extend({
+    composerMetadataSupported: z.boolean(),
+    ownedProviderIds: z.array(z.string()),
+  }),
 });
 export const installationUrl = "https://github.com/eugene1g/agent-safehouse#install";
 export const statusRpc = defineRpc({
@@ -97,3 +100,13 @@ export const headerLabel = (state: string) =>
     unavailable: "Safehouse unavailable",
     setup: "Safehouse setup",
   })[state] ?? "Safehouse checking";
+
+// Only initial creation reads this key. Existing sessions retain their provider.
+export const launchMetadataKey = "paseo-safehouse.launch";
+export function launchChoice(metadata?: Record<string, unknown>): boolean | undefined {
+  if (!metadata || !Object.hasOwn(metadata, launchMetadataKey)) return undefined;
+  const value = metadata[launchMetadataKey];
+  if (typeof value !== "boolean")
+    throw new Error("paseo-safehouse.launch must be a boolean. Choose Workspace default, On, or Off and retry.");
+  return value;
+}

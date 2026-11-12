@@ -33,6 +33,8 @@ import {
   type ResolvedPolicy,
 } from "./policy";
 
+import { launchChoice } from "../shared/contracts";
+
 type Paseo = PluginHandlerContext["paseo"];
 export const PLUGIN_ID = "paseo-safehouse";
 export const HOSTS = ["pi", "claude", "codex"] as const;
@@ -220,6 +222,16 @@ export async function availability() {
   const { binary: _binary, ...result } = await executableAvailability(await installation());
   return result;
 }
+// Reference handles are local: this feature check makes no agent read or write request.
+export async function composerAvailability(paseo: Paseo) {
+  let composerMetadataSupported = false;
+  try {
+    const handle = paseo.agents.ref("safehouse-capability-check") as unknown as { setMetadata?: unknown };
+    composerMetadataSupported = typeof handle.setMetadata === "function";
+  } catch { /* Older or unavailable host: keep the workspace header. */ }
+  return { ...await availability(), composerMetadataSupported,
+    ownedProviderIds: Object.keys((await installation())?.entries ?? {}) };
+}
 export async function setup(
   paseo: Paseo,
   options: { piCatalogExtensions?: string[] } = {},
@@ -393,13 +405,13 @@ export async function save(
   return { digest: policy.digest };
 }
 export async function routeCreation(
-  request: PluginBeforeRequests["agent.create"],
+  request: PluginBeforeRequests["agent.create"] & { metadata?: Record<string, unknown> },
   paseo: Paseo,
 ) {
   const cwd = await canonicalDirectory(request.config.cwd);
   const installed = await installation();
   const selected = installed?.entries[request.config.provider];
-  const choice = await routingChoice(cwd);
+  const choice = launchChoice(request.metadata) ?? await routingChoice(cwd);
   if (!selected && choice === false) return request;
   const recover = <T>(operation: Promise<T>) => operation.catch((error: unknown) => {
     if (error instanceof Error && error.name === "SafehouseLaunchError") throw error;

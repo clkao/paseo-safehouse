@@ -14,7 +14,8 @@ Then install this plugin:
 paseo plugin install https://github.com/spacedock-dev/paseo-safehouse
 ```
 
-If Safehouse is missing, select **Safehouse unavailable** in the workspace header to open the panel.
+If Safehouse is missing, use the composer installation link on Paseo 0.16.
+On Paseo 0.15, select **Safehouse unavailable** in the workspace header to open the panel.
 The panel links to the [official installation instructions](https://github.com/eugene1g/agent-safehouse#install).
 Install Agent Safehouse on the daemon Mac with `brew install eugene1g/safehouse/agent-safehouse`.
 The daemon must find `safehouse` through its PATH. A terminal can use a different PATH.
@@ -27,10 +28,14 @@ If the executable moves, refresh the providers to update their saved path.
 ## Use
 
 1. Select your workspace, provider, and model.
-2. Start an agent. Safehouse applies before the workspace header exists.
-3. Use the workspace header to enable or disable Safehouse for future agents.
+2. On Paseo 0.16, choose **Workspace default**, **On**, or **Off** in the Safehouse composer control. The choice applies to that draft, including the first agent in a new workspace.
+3. Start the agent. On Paseo 0.15, use the workspace header to change the default for future agents.
 
-A saved Off choice permits ordinary launches. Without a saved choice, Safehouse is On.
+**Workspace default** uses the saved workspace choice, or On when no choice is saved.
+The composer cannot preview that inherited value. Explicit On and Off leave the workspace default unchanged.
+CLI callers without draft metadata also use the workspace default.
+Open the **Safehouse** panel to view and change that workspace default on either version.
+A beta client connected to a 0.15 daemon uses the workspace header.
 Without `.safehouse`, the workspace is writable and Safehouse supplies its built-in system, toolchain, network, temporary-directory, and harness access.
 Plugin protections still apply. No extra directory grants, optional capabilities, or custom profiles apply.
 Enabling Safehouse does not create a policy file.
@@ -91,6 +96,9 @@ Off blocks direct access to captured local daemon endpoints and daemon homes, ev
 It does not revoke work already delegated to the daemon. Other services and proxy/relay routes can retain authority.
 Running processes and detached descendants keep their prepared access until replaced.
 Custom profiles can still restrict access with On.
+
+Composer transport and compatibility are checked on Paseo 0.16.0-beta.2 and 0.15.3.
+Other runtime versions have not been verified.
 
 ## Development
 

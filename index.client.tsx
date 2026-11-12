@@ -1,6 +1,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { SafehousePanel, routingErrors } from "./client/panel";
-import { headerLabel, statusRpc, routingRpc } from "./shared/contracts";
+import { SafehouseComposer, supportsComposer } from "./client/composer";
+import { availabilityRpc, headerLabel, statusRpc, routingRpc } from "./shared/contracts";
 
 export default function contribute(client: PluginClientContext) {
   const cleanups = [
@@ -22,6 +23,8 @@ export default function contribute(client: PluginClientContext) {
       },
     }),
   ];
+  const host = client as typeof client & { addComposerItem?: (item: { id: string; Component: typeof SafehouseComposer }) => () => void };
+  let removeComposer: (() => void) | undefined;
   type Registration = ReturnType<typeof client.addHeaderButton>;
   const headers = new Map<string, Registration>(),
     pills = new Map<string, Registration>();
@@ -60,6 +63,17 @@ export default function contribute(client: PluginClientContext) {
     if (refreshing) { refreshAgain = true; return; }
     refreshing = true;
     try {
+      let capable = false;
+      if (supportsComposer(host, true)) {
+        try { capable = (await client.rpc(availabilityRpc, {})).composerMetadataSupported; }
+        catch { /* An older daemon or unavailable RPC retains the header. */ }
+      }
+      if (disposed) return;
+      if (capable && !removeComposer) {
+        removeComposer = host.addComposerItem!({ id: "safehouse-choice", Component: SafehouseComposer });
+        for (const item of headers.values()) item.remove();
+        headers.clear();
+      } else if (!capable && removeComposer) { removeComposer(); removeComposer = undefined; }
       const { entries } = await client.paseo.workspaces.list();
       const seen = new Set<string>(),
         seenAgents = new Set<string>();
@@ -73,7 +87,7 @@ export default function contribute(client: PluginClientContext) {
             client.openPanel("safehouse", { workspaceId: id });
           },
         };
-        if (!headers.has(id))
+        if (!capable && !headers.has(id))
           headers.set(
             id,
             client.addHeaderButton({
@@ -91,7 +105,7 @@ export default function contribute(client: PluginClientContext) {
           const status = await client.rpc(statusRpc, { workspaceId: id });
           if (disposed) return;
           const label = headerLabel(status.state);
-          headers.get(id)!.update({ title: label, label, behavior: status.state === "unavailable" || status.state === "unsupported" ? behavior : menu(id, status.routingEnabled) });
+          headers.get(id)?.update({ title: label, label, behavior: status.state === "unavailable" || status.state === "unsupported" ? behavior : menu(id, status.routingEnabled) });
           for (const agent of status.agents) {
             seenAgents.add(agent.id);
             const label = agent.preparedAt
@@ -156,6 +170,7 @@ export default function contribute(client: PluginClientContext) {
   return () => {
     disposed = true;
     clearInterval(timer);
+    removeComposer?.();
     for (const item of [...headers.values(), ...pills.values()]) item.remove();
     for (const cleanup of cleanups) cleanup();
   };

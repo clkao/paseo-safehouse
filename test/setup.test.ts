@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { setup, status, prepareOpening, routeCreation } from "../server/service";
+import { setup, status, prepareOpening, routeCreation, setWorkspaceRouting } from "../server/service";
 import { run } from "../server/policy";
 
 // Paseo 0.15.3 recursively merges objects, replacing arrays and scalar values.
@@ -335,4 +335,45 @@ test("prefixed setup refuses an unowned occupied target without writing", { skip
   await assert.rejects(setup(f.host), /Provider safehouse-pi belongs to another configuration/);
   assert.equal(f.patches(), 0);
   assert.deepEqual(await f.get(), before);
+});
+
+
+test("draft metadata routes independently without changing workspace defaults or protected resumes", { skip: process.platform !== "darwin" }, async t => {
+  const f = await fixture(t);
+  Object.assign(f.host, { workspaces: { ref: () => ({ refresh: async () => ({ workspaceDirectory: f.dir }) }) } });
+  await setup(f.host);
+  const request = (metadata?: Record<string, unknown>, provider = "pi") => ({
+    config: { provider, cwd: f.dir, model: "native" }, ...(metadata === undefined ? {} : { metadata }),
+  });
+  const route = (metadata?: Record<string, unknown>, provider?: string) => routeCreation(request(metadata, provider), f.host);
+  assert.equal((await route()).config.provider, "safehouse-pi");
+  assert.equal((await route({ "paseo-safehouse.launch": false })).config.provider, "pi");
+  await setWorkspaceRouting(f.host, "workspace", false);
+  const records = await fs.readdir(path.join(f.root, "workspaces"));
+  const bytes = await Promise.all(records.map(file => fs.readFile(path.join(f.root, "workspaces", file), "utf8")));
+  assert.equal((await route({ "paseo-safehouse.launch": true })).config.provider, "safehouse-pi");
+  assert.equal((await route({ "paseo-safehouse.launch": false })).config.provider, "pi");
+  assert.equal((await route()).config.provider, "pi");
+  assert.equal((await route({ unrelated: true })).config.provider, "pi");
+  assert.equal((await route({ "paseo-safehouse.launch": false }, "safehouse-pi")).config.provider, "safehouse-pi");
+  for (const value of [null, "false", "true", 0, 1, [], {}, { enabled: false }])
+    await assert.rejects(route({ "paseo-safehouse.launch": value }), /paseo-safehouse.launch.*boolean/);
+  assert.deepEqual(await Promise.all(records.map(file => fs.readFile(path.join(f.root, "workspaces", file), "utf8"))), bytes);
+  await fs.writeFile(path.join(f.root, "workspaces", records[0]), "invalid record");
+  await assert.rejects(route(), /routing state is unreadable or invalid/);
+  assert.equal((await route({ "paseo-safehouse.launch": false })).config.provider, "pi");
+  assert.equal((await route({ "paseo-safehouse.launch": true })).config.provider, "safehouse-pi");
+  await fs.writeFile(path.join(f.root, "workspaces", records[0]), bytes[0]);
+  await assert.rejects(fs.access(path.join(f.dir, ".safehouse")), { code: "ENOENT" });
+  const opening = { provider: "safehouse-pi", cwd: f.dir, agentId: "protected", reason: "resume", workspaceId: null,
+    purpose: "interactive", background: false, metadata: { "paseo-safehouse.launch": false }, title: null, labels: {}, env: {}, tools: [], mcpServers: {} } as Parameters<typeof prepareOpening>[0];
+  const resumed = await prepareOpening(opening, f.host);
+  assert.equal(resumed.provider, "safehouse-pi");
+  assert.ok(resumed.env.SAFEHOUSE_WORKDIR);
+  const tampered = { ...opening, metadata: { "paseo-safehouse.launch": "invalid" } };
+  assert.ok((await prepareOpening(tampered, f.host)).env.SAFEHOUSE_WORKDIR);
+  await fs.writeFile(path.join(f.dir, ".safehouse"), "invalid policy directive");
+  await assert.rejects(route({ "paseo-safehouse.launch": false }, "safehouse-pi"));
+  await assert.rejects(prepareOpening(opening, f.host));
+  assert.equal((await route({ "paseo-safehouse.launch": false })).config.provider, "pi");
 });

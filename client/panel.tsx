@@ -9,6 +9,7 @@ import {
   headerLabel,
   installationUrl,
   statusRpc,
+  routingRpc,
   daemonAccessRpc,
   setupRpc,
   previewRpc,
@@ -38,7 +39,7 @@ export function SafehousePanel({
   theme,
   layout,
 }: PluginWorkspacePanelProps) {
-  const saveDaemonAccess = useRpc(daemonAccessRpc);
+  const saveDaemonAccess = useRpc(daemonAccessRpc), setRouting = useRpc(routingRpc);
   const [accessDraft, setAccessDraft] = useState(false),
     [accessDirty, setAccessDirty] = useState(false),
     [accessRevision, setAccessRevision] = useState("");
@@ -221,6 +222,12 @@ export function SafehousePanel({
               {button("Installation instructions", () => void action(async () => { await openExternalUrl(installationUrl); }))}
             </> : !data.configured ? <Text style={muted}>Safehouse is available. Select Refresh providers to configure its current executable path.</Text> : null}
             <Text style={muted}>Automatic Safehouse: {data.routingEnabled ? "On" : "Off"}. Detection keeps this saved choice and existing agents unchanged.</Text>
+            {button(data.routingEnabled ? "Disable workspace default" : "Enable workspace default", () => void action(async () => {
+              await setRouting({ workspaceId, enabled: !data.routingEnabled });
+              routingErrors.delete(workspaceId);
+              setRoutingError("");
+              setMessage("Workspace default saved. Explicit draft choices and existing agents keep their settings.");
+            }))}
             {button("Check again", () => void action(async () => {}))}
             {button("Refresh providers", () => void action(async () => {
               await setup({});
