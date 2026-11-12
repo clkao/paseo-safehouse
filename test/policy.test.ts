@@ -345,6 +345,8 @@ test(
       cwd,
       reason: "create" as const,
       purpose: "interactive" as const,
+      background: false,
+      metadata: {},
       title: null,
       labels: {},
       tools: [],
