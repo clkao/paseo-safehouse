@@ -11,7 +11,7 @@ import {
 } from "./shared/contracts";
 import {
   status,
-  availability,
+  composerAvailability,
   setDaemonAccess,
   setWorkspaceRouting,
   setup,
@@ -24,7 +24,7 @@ import {
 } from "./server/service";
 
 export default function contribute(server: PluginServerContext) {
-  server.handle(availabilityRpc, () => availability());
+  server.handle(availabilityRpc, (_input, { paseo }) => composerAvailability(paseo));
   server.handle(statusRpc, ({ workspaceId }, { paseo }) =>
     status(paseo, workspaceId),
   );

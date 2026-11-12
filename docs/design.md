@@ -5,7 +5,7 @@ This document specifies the intended behavior. The [validation plan](validation.
 
 ## Workspace policy
 
-New agents use Safehouse unless a saved workspace choice disables automatic routing.
+New agents use Safehouse unless their draft choice, or inherited workspace choice, disables automatic routing.
 Creation uses the request directory before any workspace ID or header exists.
 An absent `.safehouse` selects default access without creating a file or routing record.
 The file authorizes its declared access by default. Launch does not require a separate approval record.
@@ -33,6 +33,18 @@ Their stored providers do not change to ordinary providers automatically.
 
 ## User interface
 
+Paseo 0.16 supplies a per-draft Safehouse Select in workspace and New workspace composers.
+**Workspace default** removes the draft override; **On** and **Off** set a boolean `paseo-safehouse.launch` agent metadata key.
+The public composer context has no workspace identity. The control therefore does not claim an effective inherited On/Off value.
+The server resolves the canonical directory's saved choice at creation, defaulting to On.
+Only absent or boolean metadata is accepted; malformed present values reject creation.
+Explicit owned Safehouse providers always remain On, and existing agents retain their stored provider on reload regardless of mutable metadata.
+Each draft owns its metadata. Paseo resets the consumed draft after successful submission and retains it on retry.
+
+The client registers the composer only when `addComposerItem`, `useComposer`, `Select`, and the daemon's metadata capability are present.
+Namespace imports preserve compatibility with older SDK exports. The minimum Paseo version remains 0.15.
+A capable client and daemon show no workspace header. Older and mixed hosts retain this header:
+
 | Workspace state                     | Header                | Action                       |
 | ----------------------------------- | --------------------- | ---------------------------- |
 | No policy, ready providers          | Safehouse On          | Inspect defaults or add access |
@@ -50,8 +62,7 @@ Each agent’s status describes its own launch policy, not the current workspace
 Policy preparation alone does not prove that a process entered the sandbox.
 The initial implementation reports a prepared policy until runtime evidence supports a stronger status.
 
-Paseo exposes workspace header buttons and agent composer indicators.
-Composer indicators require an existing agent ID. The new-agent form has no dedicated plugin status slot.
+Existing-agent composer indicators retain their policy-preparation status and panel action.
 The header menu selects **Enable automatic Safehouse**, **Disable automatic Safehouse**, or **Review policy**.
 The selection applies across clients until changed. It leaves policy bytes and running agents unchanged.
 The daemon stores one atomic record per canonical workspace beneath protected `safehouse/workspaces/` state.
@@ -61,9 +72,7 @@ Executable availability takes precedence over the saved routing choice in the he
 Existing Safehouse agents use the current file or defaults on resume, regardless of automatic routing.
 When current policy resolution fails, receipts retain their preparation status and show that the current policy is unavailable.
 
-Known limitation: the header context identifies a workspace, not a draft.
-All clients share the selection, so a concurrent launch can observe the same choice.
-It cannot target one particular next draft. A draft-specific choice requires an upstream creation-form hook.
+On older hosts, the header changes a shared workspace choice. Concurrent launches can observe the same choice.
 
 ## Executable availability
 
@@ -81,7 +90,9 @@ The panel retains unsaved edits during polling and **Check again**.
 
 On Paseo 0.15, **Safehouse unavailable** opens the existing panel directly.
 The panel supplies daemon-Mac installation instructions, an official link, and **Check again**.
-The separate composer integration supplies the Paseo 0.16 entry point and retains the header fallback on older hosts.
+The Paseo 0.16 composer supplies installation instructions and Check again, and retains the header fallback on older hosts.
+Executable availability does not promise provider configuration or valid workspace policy.
+The availability RPC also returns the daemon metadata capability and owned provider IDs for accurate composer registration and fixed explicit-provider display.
 The generic composer has no workspace identity. Its host guidance links to installation instructions without choosing a workspace tab.
 
 ## Launch architecture
@@ -93,7 +104,7 @@ Paseo appends protocol arguments and manages the conversation.
 
 ```text
 Ordinary provider selection
-    → creation hook checks the saved routing choice from the directory
+    → creation hook checks the draft override, then the saved directory choice
     → unless Off, select the Safehouse variant and validate file or defaults
     → opening hook prepares a protected policy snapshot
     → bootstrap starts Safehouse with the native harness
