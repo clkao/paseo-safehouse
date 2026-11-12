@@ -41,45 +41,41 @@ The development agent runs outside Safehouse and controls an isolated test daemo
 Test agents run inside Safehouse. Development must preserve main-daemon agents, configuration, and existing installation paths.
 The plugin uses Paseo's public extension APIs. Changes to Paseo core require a separate approved design.
 
-## First releasable milestone
+## Current delivery scope
 
-Deliver an installable macOS beta that uses existing native harness configuration, applies a workspace's `.safehouse` policy, and preserves conversations through reload. Acceptance targets clean isolated Paseo 0.15.3 and Safehouse 0.12.0 installations. Publication follows a separate captain decision.
+Paseo Safehouse 0.2.2 is published from `spacedock-dev/paseo-safehouse` and listed in the Paseo plugin registry.
+The release handoff in the state checkout records the exact artifact, registry review, and accepted evidence.
+Historical task reports retain their original acceptance limits. Publication alone does not satisfy an unobserved acceptance check.
 
-The release requires working discovery, launch, real workspace access and denial, and native resume for Pi, Claude, and Codex. Validate concurrent workspace isolation, policy reload, and installation failure handling on disposable fixtures. Test the exact packaged artifact on a fresh daemon. Reuse existing probes; add only cases needed to prove changed behavior.
+Current work covers three user outcomes:
 
-### Scope and dispatch order
+1. The workspace header identifies unavailable Safehouse and opens installation instructions for the daemon Mac.
+2. The plugin package supplies a readable icon for the registry listing.
+3. The Paseo 0.16 composer offers a Safehouse choice for each new-agent draft, including a new workspace's first agent.
 
-1. Policy serialization is delivered and independently validated. Retain its regressions in subsequent candidates.
-2. Implement the workspace header enable/disable choice and generic sandboxed launch attempt. Test failure, explicit disable, retry, and re-enable. Never retry outside Safehouse automatically. Use the ordinary Pi picker and native configuration. The live probe passed without extra settings when the fixture policy authorized native extension dependencies. Restricted variant catalog divergence remains documented; catalog code changes are held. No extension-path settings or other harness-specific controls belong in the Safehouse panel. The existing `pi-catalog-settings` task now owns this compatibility outcome, not a settings UI.
-3. Normalize managed Codex permission options automatically and verify creation and native resume on 0.15.3. No user-facing Codex permission controls are required.
-4. Make fresh provider setup retryable after partial failure and safe under concurrent calls. Preserve unrelated entries. This is clean-install reliability, not migration.
-5. Correct capability-boundary claims with a concise warning: additional MCP services can provide access outside the sandbox. Other configured plugins must not be blocked or disabled. The `plugin-capability-boundary` task owns this disclosure; its former single-plugin implementation is withdrawn.
-6. Complete the integrated provider acceptance matrix and validate the exact distributable. Package contents, setup instructions, and known limits must match observed behavior. A public listing, remote, and publication are separate decisions rather than prerequisites for a locally reviewable beta artifact.
+The composer task must prove metadata transport and compatibility before implementation approval.
+Existing agents retain their sandbox identity. The workspace choice remains the default for callers without a draft choice.
+Task designs define file limits, acceptance criteria, and independent validation. Shared-file integration follows reviewed dependency order.
 
-Design and independent review may overlap. Sequence changes to shared service/setup code against reviewed integration points. Keep daemon fixtures separately owned. Dispatch security-sensitive validation to a fresh worker; do not expand warning-only documentation work into a new enforcement system or exhaustive peer-plugin test framework. Existing stage gates remain in force, without repeated approval of the constraints recorded here.
+### Runtime and acceptance boundaries
 
-### Constraints and workarounds
+Development uses isolated daemons and disposable fixtures. The established runtime evidence uses Paseo 0.15.3 and Safehouse 0.12.0.
+New API claims require evidence on the corresponding Paseo version. The manifest minimum remains `>=0.15.0` until an approved design changes it.
 
-| Constraint | Supported behavior or workaround |
-| --- | --- |
-| Plugins cannot add the proposed controls to Paseo's new-agent launcher. | Use the native picker and a workspace header menu. The persistent selection applies across clients, not to one draft. Keep the panel focused on policy and reload. |
-| Catalog discovery runs without the workspace opening hook. | Keep discovery sandboxed without workspace grants; load existing native user configuration. Ordinary discovery must not require copying extension paths into Safehouse. Ordinary Pi selection and sandboxed chat passed with explicit fixture dependency access; restricted variant catalogs can differ. |
-| The opening hook cannot rewrite Codex mode or provider options. | Normalize and persist compatible options at creation; prove that native resume retains them. No legacy-session migration is promised. |
-| Plugin hooks see local MCP contributions, not a final global veto point. | Disclose additional MCP authority. Do not claim global filtering or impose a single-plugin installation rule. |
-| Running processes retain their prepared policy snapshot. | Reload the selected agent from the Safehouse panel after policy edits; this interrupts its active turn and preserves the native conversation. |
-| Safehouse includes baseline filesystem access, including temporary paths. | Explain baseline access separately from workspace grants. Use denied fixtures outside baseline paths when testing isolation. |
-| Setup can currently lose its ownership record after an applied config patch. | Fix retry/recovery before release. During development use disposable daemon fixtures; never delete or take over real unrelated provider entries as a workaround. |
-| The installed desktop daemon launcher failed to find its helper app. | Development uses the pinned 0.15.3 CLI in disposable tooling, with CL's package-scoped release-age exception. Its daemon/configuration probe passed; full acceptance remains outstanding. Do not change global npm settings or the main daemon. |
-| No remote or publication destination is authorized. | Deliver a locally reviewed artifact and local merges. Ask separately before publication. |
+Security-boundary changes require failing regressions, independent validation, and live positive and negative evidence.
+UI and asset checks match the affected behavior. Existing green evidence can support unchanged behavior when artifact identity establishes its applicability.
+The task record must distinguish observed results, approved deferrals, and missing evidence.
 
-No installation migration, Paseo core changes, main-daemon changes, harness-specific panel settings, new capability broker, or peer-plugin prohibition belongs in this milestone. New tests must exercise an actual claimed behavior; no new general testing framework is needed.
+Installation migration, Paseo core changes, and harness-specific panel controls remain outside this workflow.
+Additional MCP services can provide access outside the process sandbox. The plugin discloses this authority and does not prohibit peer plugins.
+Policy authority covers protection within the running session. Cross-launch path changes remain a separate held task.
+Native cancellation and behavior after plugin removal remain outside accepted lifecycle scope.
 
-These scope decisions control older task proposals. Revise task designs before their next dispatch; do not implement withdrawn UI or enforcement criteria. Keep the compatibility and disclosure work tracked under the existing tasks rather than creating replacement process tasks.
+### Public API opportunities
 
-## Future upstream API opportunities
-
-Creation-form contributions can add per-draft choices and readiness. Provider-wrapper, discovery, and final-capability hooks can simplify integration.
-These are not beta prerequisites. See [the design table](../design.md#future-upstream-api-opportunities) for current constraints and workarounds.
+Paseo 0.16 provides composer controls and creation metadata. The active composer task evaluates these APIs for draft-specific sandbox choices.
+Provider-wrapper, discovery, and final-capability hooks remain separate opportunities. They are not prerequisites for the current release.
+The design document records the integration limits and supported workarounds.
 
 ## Local dependency storage
 
@@ -94,7 +90,7 @@ This is a development prototype with security-sensitive enforcement paths.
 Policy serialization, process launch, state protection, and installation changes require failing regressions and independent validation.
 Runtime claims require live sandbox evidence with a negative case. UI changes receive checks proportional to their impact.
 A beta release requires all material boundary findings resolved, provider acceptance complete, and a clean distributable installation.
-Publishing and choosing a public repository require CL's explicit approval. There is no remote configured at commissioning.
+Publishing requires CL's explicit approval. The public repository is `spacedock-dev/paseo-safehouse`.
 
 ## File Naming
 
@@ -300,10 +296,10 @@ State boundaries that a fresh reader needs to assess the task.
 
 ## Local delivery and publication
 
-The pr-merge mod is installed for reviewed delivery. No remote exists yet.
-Before delivery, ask CL to choose a repository or approve the mod's documented local-merge path.
-Do not invent a remote, push publicly, or bypass the terminal merge guard.
-Publishing is a separate captain decision after the beta artifact passes acceptance.
+The pr-merge mod controls reviewed delivery. CL authorized local merges.
+The `github` remote points to `spacedock-dev/paseo-safehouse`. Workflow state remains local on `spacedock-state/dev`.
+Each publication requires CL's approval for the concrete release. Local gate authority does not grant publication authority.
+The terminal merge guard remains required.
 
 ## Commit Discipline
 
