@@ -34,12 +34,14 @@ Their stored providers do not change to ordinary providers automatically.
 ## User interface
 
 Paseo 0.16 supplies a per-draft Safehouse Select in workspace and New workspace composers.
-**Workspace default** removes the draft override; **On** and **Off** set a boolean `paseo-safehouse.launch` agent metadata key.
-The public composer context has no workspace identity. The control therefore does not claim an effective inherited On/Off value.
-The server resolves the canonical directory's saved choice at creation, defaulting to On.
+The lock control offers **On** and **Off**, which set a boolean `paseo-safehouse.launch` agent metadata key.
+A layout effect initializes missing draft metadata to true, including New workspace drafts. It preserves existing true and false values.
+The control shows a choice only after its current composer snapshot contains a boolean.
+Pending initialization shows neutral feedback. A rejected initialization shows an error and an explicit retry action.
+Callers without metadata use the saved workspace choice at creation, or On when no choice is saved.
 Only absent or boolean metadata is accepted; malformed present values, including raw null, reject creation.
 The SDK removes the key when `setMetadata` receives null; it does not send that null as a choice.
-An explicit boolean skips the inherited routing record, including a malformed record; Workspace default requires a valid saved record.
+An explicit boolean skips the inherited routing record, including a malformed record. Absent metadata requires a valid saved record.
 Explicit owned Safehouse providers always remain On, and existing agents retain their stored provider on reload regardless of mutable metadata.
 Each draft owns its metadata. Paseo resets the consumed draft after successful submission and retains it on retry.
 
@@ -68,7 +70,7 @@ Each agent’s status describes its own launch policy, not the current workspace
 Policy preparation alone does not prove that a process entered the sandbox.
 The initial implementation reports a prepared policy until runtime evidence supports a stronger status.
 
-Existing-agent composer indicators retain their policy-preparation status and panel action.
+Existing-agent indicators show a Lock icon above the composer and retain their policy-preparation status and workspace-specific panel action.
 The header menu selects **Enable automatic Safehouse**, **Disable automatic Safehouse**, or **Review policy**.
 The selection applies across clients until changed. It leaves policy bytes and running agents unchanged.
 The daemon stores one atomic record per canonical workspace beneath protected `safehouse/workspaces/` state.

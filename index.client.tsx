@@ -8,14 +8,14 @@ export default function contribute(client: PluginClientContext) {
     client.addWorkspacePanel({
       id: "safehouse",
       title: "Safehouse",
-      icon: "ShieldCheck",
+      icon: "Lock",
       locations: ["workspace", "explorer"],
       Component: SafehousePanel,
     }),
     client.addCommandCenterItem({
       id: "safehouse",
       title: "Configure or review Safehouse",
-      icon: "ShieldCheck",
+      icon: "Lock",
       context: "workspace",
       keywords: ["sandbox", "permissions"],
       onSelect({ openPanel }) {
@@ -96,7 +96,7 @@ export default function contribute(client: PluginClientContext) {
               button: {
                 title: "Checking Safehouse",
                 label: "Safehouse checking",
-                icon: "ShieldCheck",
+                icon: "Lock",
                 behavior: menu(id),
               },
             }),
@@ -126,7 +126,7 @@ export default function contribute(client: PluginClientContext) {
                   button: {
                     title: label,
                     label: displayLabel,
-                    icon: "ShieldCheck",
+                    icon: "Lock",
                     behavior,
                   },
                 }),

@@ -107,6 +107,6 @@ export function launchChoice(metadata?: Record<string, unknown>): boolean | unde
   if (!metadata || !Object.hasOwn(metadata, launchMetadataKey)) return undefined;
   const value = metadata[launchMetadataKey];
   if (typeof value !== "boolean")
-    throw new Error("paseo-safehouse.launch must be a boolean. Choose Workspace default, On, or Off and retry.");
+    throw new Error("paseo-safehouse.launch must be a boolean. Choose On or Off and retry.");
   return value;
 }

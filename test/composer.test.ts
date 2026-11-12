@@ -24,19 +24,26 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
     const calls: string[] = [], updates: any[] = [], effects: (() => unknown)[] = [];
     const oldClient = mode === "old" || mode === "old-beta";
     const intervals: (() => unknown)[] = [];
+    let cleared = 0, writes = 0, locked = false, rejectWrite = false;
+    let layout: (() => void | (() => void)) | undefined, cleanup: (() => void) | undefined, previousDeps: unknown[] = [];
     let rpcFails = mode === "rpc-failure", panel: any;
     let contribution: any, state: any[] = [], stateIndex = 0;
     const metadata: Record<string, unknown> = {};
     const composer = { context: "draft", agent: { provider: "pi", metadata }, async setMetadata(patch: Record<string, unknown>) {
+      writes++;
+      if (locked || rejectWrite) throw Error(locked ? "Composer is locked" : "Metadata rejected");
       for (const [key, value] of Object.entries(patch)) { if (value === null) delete metadata[key]; else metadata[key] = value; }
     } };
     const available = { availability: "available", availabilityError: null, composerMetadataSupported: mode !== "mixed" && mode !== "old", ownedProviderIds: ["safehouse-pi"] };
-    const react = { useState(initial: unknown) { const i = stateIndex++; if (!(i in state)) state[i] = initial; return [state[i], (value: unknown) => { state[i] = value; }]; }, useEffect(fn: () => unknown) { effects.push(fn); } };
+    const react = { useState(initial: unknown) { const i = stateIndex++; if (!(i in state)) state[i] = initial; return [state[i], (value: unknown) => { state[i] = value; }]; }, useEffect(fn: () => unknown) { effects.push(fn); },
+      useLayoutEffect(fn: () => void | (() => void), deps: unknown[]) {
+        if (deps.some((value, i) => !Object.is(value, previousDeps[i]))) { layout = fn; previousDeps = deps; }
+      } };
     const sdk: any = { useRpc: () => async () => available, openExternalUrl: (url: string) => calls.push(url) };
     if (!oldClient && mode !== "missing-hook") sdk.useComposer = () => composer;
     const Select = () => null;
     const modules: Record<string, unknown> = { "@getpaseo/plugin": plugin, zod, react, "react/jsx-runtime": { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }), Fragment: "fragment" }, "react-native": { View: "View", Text: "Text", Pressable: "Pressable" }, "@getpaseo/plugin/client": sdk, "@getpaseo/plugin/client/ui": oldClient || mode === "missing-select" ? {} : { Select } };
-    const factory = vm.runInNewContext(clientBundle, { setInterval: (fn: () => unknown) => { intervals.push(fn); return intervals.length; }, clearInterval() {} });
+    const factory = vm.runInNewContext(clientBundle, { setInterval: (fn: () => unknown) => { intervals.push(fn); return intervals.length; }, clearInterval() { cleared++; } });
     const exports = factory((name: string) => { assert.ok(name in modules, name); return modules[name]; });
     const registration = () => ({ update: (value: unknown) => updates.push(value), remove: () => calls.push("remove") });
     const client: any = { addWorkspacePanel: (item: unknown) => { panel = item; return () => {}; }, addCommandCenterItem: () => () => {},
@@ -53,18 +60,43 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
     assert.deepEqual(calls, mode === "new" ? ["composer", "pill"] : ["header", "pill"], mode);
     if (mode === "new") {
       const render = () => { stateIndex = 0; return contribution.Component({ theme: { colors: { foregroundMuted: "gray" } } }); };
-      render(); const stop = effects[0]() as () => void; await new Promise(resolve => setImmediate(resolve));
-      const select = () => render().props.children[0].props;
-      assert.equal(select().value, "default");
-      await select().onValueChange({ value: "off" }); assert.equal(metadata["paseo-safehouse.launch"], false);
-      assert.equal(select().value, "off");
-      await select().onValueChange({ value: "on" }); assert.equal(metadata["paseo-safehouse.launch"], true);
-      await select().onValueChange({ value: "default" }); assert.deepEqual(metadata, {});
+      const flushLayout = () => { if (layout) { cleanup?.(); cleanup = layout() || undefined; layout = undefined; } };
+      const settle = () => new Promise(resolve => setImmediate(resolve));
+      const select = () => render().props.children[0];
+      const choose = async (value: string) => { await select().props.onValueChange({ value }); render(); flushLayout(); };
+      assert.notEqual(select().type, Select, "no On claim before explicit metadata");
+      flushLayout(); const stop = effects[0]() as () => void; await settle();
+      assert.equal(metadata["paseo-safehouse.launch"], true);
+      assert.equal(select().props.value, "on"); flushLayout();
+      assert.equal(select().props.icon, "Lock");
+      assert.deepEqual(Array.from(select().props.options, (x: any) => x.value), ["on", "off"]);
+      await choose("off"); assert.equal(metadata["paseo-safehouse.launch"], false);
+      assert.equal(select().props.value, "off");
+      const offWrites = writes; render(); flushLayout(); assert.equal(writes, offWrites, "retry retains Off");
+      await choose("on"); assert.equal(metadata["paseo-safehouse.launch"], true);
+      for (const context of ["draft", "new-workspace"]) {
+        composer.context = context; delete metadata["paseo-safehouse.launch"];
+        assert.notEqual(select().type, Select); flushLayout(); await settle();
+        assert.equal(metadata["paseo-safehouse.launch"], true); assert.equal(select().props.value, "on"); flushLayout();
+      }
+      for (const rejection of ["locked", "rejected"]) {
+        delete metadata["paseo-safehouse.launch"]; locked = rejection === "locked"; rejectWrite = !locked;
+        render(); flushLayout(); await settle();
+        const feedback = select(); assert.notEqual(feedback.type, Select);
+        assert.match(feedback.props.children[0].props.children, /Safehouse choice failed:/);
+        const failedWrites = writes; render(); flushLayout(); assert.equal(writes, failedWrites, "no rejection loop");
+        locked = rejectWrite = false; feedback.props.children[1].props.onPress();
+        render(); flushLayout(); await settle(); assert.equal(select().props.value, "on"); flushLayout();
+      }
       composer.agent.provider = "safehouse-pi"; metadata["paseo-safehouse.launch"] = false;
-      assert.equal(select().value, "on"); assert.equal(select().disabled, true);
-      await assert.rejects(select().onValueChange({ value: "off" }), /fixed/);
-      composer.context = "agent"; assert.equal(render(), null);
-      stop();
+      assert.equal(select().props.value, "on"); assert.equal(select().props.disabled, true); flushLayout();
+      assert.equal(metadata["paseo-safehouse.launch"], false, "fixed provider does not rewrite existing metadata");
+      await assert.rejects(choose("off"), /fixed/);
+      composer.context = "agent"; delete metadata["paseo-safehouse.launch"];
+      const agentWrites = writes; assert.equal(render(), null); flushLayout(); assert.equal(writes, agentWrites);
+      composer.context = "draft"; rejectWrite = true; render(); flushLayout(); cleanup?.();
+      const beforeCleanup = [...state]; await settle(); assert.deepEqual(state, beforeCleanup, "late failure ignores unmounted component");
+      stop(); assert.equal(cleared, 1);
       const panelCalls: any[] = [];
       const panelStatus = { platform: "darwin", availability: "available", configured: false, routingEnabled: false, unavailable: {}, agents: [], features: [] };
       sdk.useRpc = (rpc: { name: string }) => async (input: unknown) => { panelCalls.push([rpc.name, input]); return { ...panelStatus, routingEnabled: true }; };
