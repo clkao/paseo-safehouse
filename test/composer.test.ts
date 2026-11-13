@@ -27,7 +27,10 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
     let cleared = 0, writes = 0, locked = false, rejectWrite = false;
     let layout: (() => void | (() => void)) | undefined, cleanup: (() => void) | undefined, previousDeps: unknown[] = [];
     let rpcFails = mode === "rpc-failure", panel: any;
-    let contribution: any, state: any[] = [], stateIndex = 0;
+    let contribution: any, state: any[] = [], stateIndex = 0, pillCount = 0, statusFails = false;
+    let statusAgents: any[] = [{ id: "existing", provider: "safehouse-pi", preparedAt: "now", changed: false }];
+    let pillButton: any;
+    const navigations: unknown[] = [];
     const metadata: Record<string, unknown> = {};
     const composer = { context: "draft", agent: { provider: "pi", metadata }, async setMetadata(patch: Record<string, unknown>) {
       writes++;
@@ -39,21 +42,23 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
       useLayoutEffect(fn: () => void | (() => void), deps: unknown[]) {
         if (deps.some((value, i) => !Object.is(value, previousDeps[i]))) { layout = fn; previousDeps = deps; }
       } };
-    const sdk: any = { useRpc: () => async () => available, openExternalUrl: (url: string) => calls.push(url) };
+    let composerRpc = async (_rpc: { name: string }, _input: any): Promise<any> => available;
+    const sdk: any = { useRpc: (rpc: { name: string }) => async (input: any) => composerRpc(rpc, input), openExternalUrl: (url: string) => calls.push(url) };
     if (!oldClient && mode !== "missing-hook") sdk.useComposer = () => composer;
     const Select = () => null;
-    const modules: Record<string, unknown> = { "@getpaseo/plugin": plugin, zod, react, "react/jsx-runtime": { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }), Fragment: "fragment" }, "react-native": { View: "View", Text: "Text", Pressable: "Pressable" }, "@getpaseo/plugin/client": sdk, "@getpaseo/plugin/client/ui": oldClient || mode === "missing-select" ? {} : { Select } };
+    const modules: Record<string, unknown> = { "@getpaseo/plugin": plugin, zod, react, "react/jsx-runtime": { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }), Fragment: "fragment" }, "react-native": { View: "View", Text: "Text", Pressable: "Pressable" }, "@getpaseo/plugin/client": sdk, "@getpaseo/plugin/client/ui": oldClient || mode === "missing-select" ? {} : { Select, Icon: "Icon" } };
     const factory = vm.runInNewContext(clientBundle, { setInterval: (fn: () => unknown) => { intervals.push(fn); return intervals.length; }, clearInterval() { cleared++; } });
     const exports = factory((name: string) => { assert.ok(name in modules, name); return modules[name]; });
     const registration = () => ({ update: (value: unknown) => updates.push(value), remove: () => calls.push("remove") });
     const client: any = { addWorkspacePanel: (item: unknown) => { panel = item; return () => {}; }, addCommandCenterItem: () => () => {},
       addHeaderButton: () => { calls.push("header"); return registration(); },
-      addComposerPill: () => { calls.push("pill"); return registration(); },
+      addComposerPill: (item: any) => { calls.push("pill"); pillButton = item.button; pillCount++; let removed = false; return { update(button: any) { pillButton = button; }, remove() { if (!removed) { pillCount--; removed = true; } } }; },
       paseo: { workspaces: { list: async () => ({ entries: [{ id: "workspace" }] }) } },
       rpc: async (rpc: { name: string }) => {
         if (rpc.name === "safehouse.availability") { if (rpcFails) throw Error("unavailable"); return available; }
-        return { state: "ready", routingEnabled: true, policyValid: true, agents: [{ id: "existing", preparedAt: "now", changed: false }] };
-      }, openPanel() {} };
+        if (statusFails) throw Error("status unavailable");
+        return { state: "ready", routingEnabled: true, policyValid: true, agents: statusAgents };
+      }, openPanel(...args: unknown[]) { navigations.push(args); } };
     if (!oldClient) client.addComposerItem = (item: unknown) => { calls.push("composer"); contribution = item; return () => calls.push("remove-composer"); };
     const dispose = exports.default(client);
     await new Promise(resolve => setImmediate(resolve));
@@ -97,6 +102,61 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
       composer.context = "draft"; rejectWrite = true; render(); flushLayout(); cleanup?.();
       const beforeCleanup = [...state]; await settle(); assert.deepEqual(state, beforeCleanup, "late failure ignores unmounted component");
       stop(); assert.equal(cleared, 1);
+      // Literal receipt fixtures are independent of production label/locator helpers.
+      let statusResult: any = { policyValid: true, agents: [{ id: "existing", provider: "safehouse-pi", preparedAt: "2026-11-12T00:00:00Z", changed: false }] };
+      let lookupFails = false, lookupWorkspace = "workspace";
+      composerRpc = async (rpc, input) => {
+        if (rpc.name !== "safehouse.status") return available;
+        assert.equal(input.workspaceId, lookupWorkspace); if (lookupFails) throw Error("lookup failed"); return statusResult;
+      };
+      composer.context = "agent"; composer.agent.provider = "safehouse-pi";
+      metadata["paseo-safehouse.session"] = { agentId: "existing", workspaceId: "workspace" };
+      const poll = async () => { effects.length = 0; render(); const cancel = effects[0]() as () => void; await settle(); return { tree: render(), cancel }; };
+      let current = await poll(); assert.ok(current.tree, JSON.stringify(state)); assert.equal(current.tree.props.accessibilityLabel, "Safehouse · policy prepared");
+      assert.equal(current.tree.props.children.props.name, "Lock");
+      effects.length = 0; render(); const ready = effects[1]() as () => void;
+      assert.equal(pillCount, 0); const secondReady = effects[1]() as () => void;
+      current.tree.props.onPress(); assert.equal(JSON.stringify(navigations.pop()), '["safehouse",{"workspaceId":"workspace"}]');
+      ready(); await settle(); assert.equal(pillCount, 0, "another mounted instance remains ready");
+      secondReady(); await settle(); assert.equal(pillCount, 1, "last unmount restores the fallback"); current.cancel();
+      for (const [preparedAt, changed, policyValid, expected] of [
+        ["now", true, true, "Safehouse · policy changed"], [null, false, true, "Safehouse · no launch record"],
+        ["now", false, false, "Safehouse · policy prepared; current policy unavailable"],
+      ] as const) {
+        statusResult = { policyValid, agents: [{ id: "existing", provider: "safehouse-pi", preparedAt, changed }] };
+        current = await poll(); assert.equal(current.tree.props.accessibilityLabel, expected); current.cancel();
+      }
+      effects.length = 0; render(); const loseReady = effects[1]() as () => void; assert.equal(pillCount, 0);
+      lookupFails = true; current = await poll(); assert.equal(current.tree, null); loseReady(); await settle(); assert.equal(pillCount, 1); current.cancel(); lookupFails = false;
+      // Both status consumers fail after inline readiness removed the registered pill.
+      current = await poll(); effects.length = 0; render(); const loseBoth = effects[1]() as () => void;
+      assert.equal(pillCount, 0); statusFails = lookupFails = true;
+      current.cancel(); current = await poll(); assert.equal(current.tree, null); loseBoth(); await settle();
+      assert.equal(pillCount, 1); assert.equal(pillButton.label, "Unknown"); assert.equal(pillButton.title, "Safehouse status unavailable");
+      pillButton.behavior.onPress(); assert.equal(JSON.stringify(navigations.pop()), '["safehouse",{"workspaceId":"workspace"}]');
+      current.cancel(); statusFails = lookupFails = false; intervals[0](); await settle(); assert.equal(pillButton.label, "On");
+      const remembered = statusAgents; statusAgents = []; intervals[0](); await settle(); assert.equal(pillCount, 0);
+      statusFails = true; intervals[0](); await settle(); assert.equal(pillCount, 0, "removed agents are not fabricated on failure");
+      statusFails = false; statusAgents = remembered; intervals[0](); await settle(); assert.equal(pillCount, 1);
+      for (const reference of [undefined, null, "bad", { agentId: "existing" }, { agentId: "wrong", workspaceId: "workspace" }]) {
+        metadata["paseo-safehouse.session"] = reference;
+        current = await poll(); assert.equal(current.tree, null); current.cancel();
+      }
+      metadata["paseo-safehouse.session"] = { agentId: "existing", workspaceId: "workspace" };
+      composer.agent.provider = "pi"; metadata["paseo-safehouse.launch"] = true;
+      current = await poll(); assert.equal(current.tree, null, "ordinary launch metadata is not running status"); current.cancel();
+      composer.agent.provider = "safehouse-pi";
+      metadata["paseo-safehouse.session"] = { agentId: "existing", workspaceId: "other-workspace" };
+      lookupWorkspace = "other-workspace"; statusResult = { policyValid: true, agents: [] };
+      current = await poll(); assert.equal(current.tree, null, "cross-workspace reference needs a matching server record"); current.cancel();
+      metadata["paseo-safehouse.session"] = { agentId: "existing", workspaceId: "workspace" }; lookupWorkspace = "workspace";
+      let resolveLate: (value: unknown) => void = () => {};
+      statusResult = new Promise(resolve => { resolveLate = resolve; });
+      effects.length = 0; render(); const cancelLate = effects[0]() as () => void;
+      metadata["paseo-safehouse.session"] = { agentId: "elsewhere", workspaceId: "other-workspace" };
+      assert.equal(render(), null, "changed target cannot reuse a previous receipt"); cancelLate();
+      const pendingState = [...state]; resolveLate({ policyValid: true, agents: [{ id: "existing", provider: "safehouse-pi", preparedAt: "now", changed: false }] });
+      await settle(); assert.deepEqual(state, pendingState, "late response after a reference change is ignored");
       const panelCalls: any[] = [];
       const panelStatus = { platform: "darwin", availability: "available", configured: false, routingEnabled: false, unavailable: {}, agents: [], features: [] };
       sdk.useRpc = (rpc: { name: string }) => async (input: unknown) => { panelCalls.push([rpc.name, input]); return { ...panelStatus, routingEnabled: true }; };

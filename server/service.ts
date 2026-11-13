@@ -33,7 +33,7 @@ import {
   type ResolvedPolicy,
 } from "./policy";
 
-import { launchChoice } from "../shared/contracts";
+import { launchChoice, sessionMetadataKey } from "../shared/contracts";
 
 type Paseo = PluginHandlerContext["paseo"];
 export const PLUGIN_ID = "paseo-safehouse";
@@ -537,6 +537,15 @@ export async function status(paseo: Paseo, workspaceId: string) {
           agent.workspaceId === workspaceId && saved?.entries[agent.provider],
       )
       .map(async ({ agent }) => {
+        // Status refresh reconciles UI locators; lifecycle hooks never await metadata writes.
+        try {
+          const reference = { agentId: agent.id, workspaceId: agent.workspaceId };
+          const metadata = (agent as typeof agent & { metadata?: Record<string, unknown> }).metadata;
+          if (!isDeepStrictEqual(metadata?.[sessionMetadataKey], reference)) {
+            const handle = paseo.agents.ref(agent.id) as unknown as { setMetadata?: (patch: Record<string, unknown>) => Promise<unknown> };
+            await handle.setMetadata?.({ [sessionMetadataKey]: reference });
+          }
+        } catch { /* Publication is best-effort; receipts remain authoritative. */ }
         const receipt = await readJson<Receipt>(receiptPath(agent.id));
         return {
           id: agent.id,

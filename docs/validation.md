@@ -159,3 +159,17 @@ Run the existing compiler-backed composer test with `PASEO_RUNTIME_MODULES`, plu
 The composer test covers explicit initialization, false preservation, reset, rejection, cleanup, fixed providers, and old/mixed-host registration.
 Launch and policy tests preserve absent-metadata fallback and existing session identity.
 Record mounted observations separately from offline test results. Independent validation must reproduce the mounted candidate behavior.
+
+## Inline session lock
+
+The compiler-backed composer test uses literal receipt fixtures for prepared, changed, missing-record, and unavailable-policy labels.
+It checks malformed and unmatched references, provider mismatch, RPC failure, late responses, explicit navigation, and readiness cleanup across mounted instances.
+Simultaneous status failures preserve a last-known action with an unavailable label. Recovery and successful removal clear stale fallback state.
+The policy test checks locator publication, stale-reference repair, unchanged metadata, rejected writes, missing API support, and absence of lifecycle writes.
+
+On the existing isolated beta daemon, remove an old session's UI locator. Observe its automatic restoration without process reload.
+Repeat with a new idle session. Compare IDs, providers, and preparation timestamps before and after publication.
+At wide and narrow widths, check one inline lock and no duplicate pill after readiness.
+Open the lock while another workspace or pane has focus. Compare the panel directory and receipt with the public status response.
+Exercise changed, missing-record, unavailable-policy, malformed-reference, recovery, and ordinary-session cases with disposable fixtures.
+Check that the retained Off draft stays Off. Record independent live results against the exact candidate commit.

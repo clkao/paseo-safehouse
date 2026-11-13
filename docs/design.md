@@ -70,7 +70,21 @@ Each agent’s status describes its own launch policy, not the current workspace
 Policy preparation alone does not prove that a process entered the sandbox.
 The initial implementation reports a prepared policy until runtime evidence supports a stronger status.
 
-Existing-agent indicators show a Lock icon above the composer and retain their policy-preparation status and workspace-specific panel action.
+On Paseo 0.16, an existing Safehouse agent shows one Lock action inside its composer.
+Its accessible label distinguishes prepared, changed, missing launch records, and unavailable current policy.
+The action opens the agent's workspace panel through an explicit workspace ID, regardless of focus.
+Older hosts retain the pill above the composer.
+
+Each workspace status refresh publishes `paseo-safehouse.session: { agentId, workspaceId }` on its owned Safehouse agents.
+Both IDs come from the daemon's agent record. Publication patches only this metadata key when its value differs.
+Publication failures leave receipt status available and retry on the next refresh. Lifecycle hooks never publish metadata.
+The reference is a mutable UI locator. It grants no authority and does not prove preparation or sandbox entry.
+
+The agent composer uses its existing refresh timer to resolve the referenced workspace's status.
+It requires a matching agent ID and provider in that status before it shows the lock.
+Missing, malformed, unmatched, or failed references retain the pill. A changed target discards prior results and ignores late responses.
+Each mounted inline action reports readiness. The registration hides its agent's pill until the last ready instance loses readiness or unmounts.
+If status fails, the last-known session action remains available with an unavailable label. A successful status refresh removes obsolete session actions.
 The header menu selects **Enable automatic Safehouse**, **Disable automatic Safehouse**, or **Review policy**.
 The selection applies across clients until changed. It leaves policy bytes and running agents unchanged.
 The daemon stores one atomic record per canonical workspace beneath protected `safehouse/workspaces/` state.
