@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useState, type ComponentType } from "react"
 import { Pressable, Text, View } from "react-native";
 import * as sdk from "@getpaseo/plugin/client";
 import * as ui from "@getpaseo/plugin/client/ui";
-import { availabilityRpc, installationUrl, launchMetadataKey } from "../shared/contracts";
+import { availabilityRpc, installationUrl, launchMetadataKey, sessionMetadataKey, sessionLabel, statusRpc } from "../shared/contracts";
 
 type Choice = "on" | "off";
 export type Composer = {
@@ -32,10 +32,21 @@ export function setDraftChoice(composer: Composer, owned: readonly string[], val
     return Promise.reject(new Error("This agent's Safehouse provider is fixed."));
   return composer.setMetadata({ [launchMetadataKey]: value === "on" });
 }
-export function SafehouseComposer({ theme }: { theme: { colors: { foregroundMuted: string } } }) {
+export function SafehouseComposer({ theme, onReady, openDetails }: {
+  theme: { colors: { foregroundMuted: string } };
+  onReady: (agentId: string) => () => void; openDetails: (workspaceId: string) => void;
+}) {
   const composer = composerSdk.useComposer!();
   const Select = composerUi.Select!;
   const readAvailability = sdk.useRpc(availabilityRpc);
+  const readStatus = sdk.useRpc(statusRpc);
+  const reference = composer.agent.metadata[sessionMetadataKey] as { agentId?: unknown; workspaceId?: unknown } | null;
+  const agentId = typeof reference?.agentId === "string" ? reference.agentId : "";
+  const workspaceId = typeof reference?.workspaceId === "string" ? reference.workspaceId : "";
+  const target = JSON.stringify([composer.context, agentId, workspaceId, composer.agent.provider]);
+  const [session, setSession] = useState<{ target: string; label: string } | null>(null);
+  const readyId = composer.context === "agent" && session?.target === target ? agentId : "";
+
   type Availability = Awaited<ReturnType<typeof readAvailability>>;
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [error, setError] = useState("");
@@ -62,14 +73,23 @@ export function SafehouseComposer({ theme }: { theme: { colors: { foregroundMute
   useEffect(() => {
     let active = true;
     const poll = async () => {
-      try { const next = await readAvailability({}); if (active) { setAvailability(next); setError(""); } }
-      catch (e) { if (active) { setAvailability(null); setError(String(e)); } }
+      try {
+        if (composer.context === "agent") {
+          const status = agentId && workspaceId ? await readStatus({ workspaceId }) : null;
+          const agent = status?.agents.find(a => a.id === agentId && a.provider === composer.agent.provider);
+          if (active) setSession(agent && status ? { target, label: sessionLabel(agent, status.policyValid) } : null);
+        } else { const next = await readAvailability({}); if (active) { setAvailability(next); setError(""); } }
+      } catch (e) { if (active) { setSession(null); setAvailability(null); setError(String(e)); } }
     };
     void poll(); const timer = setInterval(() => void poll(), 5000);
     return () => { active = false; clearInterval(timer); };
-  }, [readAvailability]);
-  // Existing agents already have a policy-status pill with an exact workspace/agent action.
-  if (composer.context === "agent") return null;
+  }, [readAvailability, readStatus, target]);
+  useEffect(() => readyId ? onReady(readyId) : undefined, [readyId, onReady]);
+  if (composer.context === "agent") return readyId ?
+    <Pressable accessibilityRole="button" accessibilityLabel={session!.label}
+      onPress={() => openDetails(workspaceId)} style={{ padding: 6 }}>
+      <ui.Icon name="Lock" size={16} color={theme.colors.foregroundMuted} />
+    </Pressable> : null;
   const owned = availability?.ownedProviderIds ?? [];
   const fixed = owned.includes(composer.agent.provider ?? "");
   const choice = typeof launchValue === "boolean" ? draftChoice(composer, owned) : undefined;

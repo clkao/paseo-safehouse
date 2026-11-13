@@ -422,6 +422,28 @@ test(
     assert.equal(resumed.provider, variant("pi"));
     running.push({ agent: { id: "agent-0", workspaceId: workspaces[0], provider: "safehouse-pi", providerOptions: { keep: true } } });
     assert.equal((await status(paseo, workspaces[0])).agents[0].changed, false);
+    await t.test("status repairs UI locators without lifecycle writes or receipt dependence", async () => {
+      const metadata: Record<string, unknown> = { unrelated: "keep" }, patches: unknown[] = [];
+      const owned = { ...running[1].agent, metadata };
+      let reject = false, supported = true;
+      const publishing = { ...paseo, agents: {
+        list: async () => ({ entries: [{ agent: owned }, { agent: { ...owned, id: "ordinary", provider: "pi" } }, { agent: { ...owned, id: "elsewhere", workspaceId: workspaces[1] } }] }),
+        ref: (id: string) => supported ? { setMetadata: async (patch: Record<string, unknown>) => {
+          assert.equal(id, "agent-0"); patches.push(patch); if (reject) throw Error("write rejected"); Object.assign(metadata, patch);
+        } } : {},
+      } } as unknown as typeof paseo;
+      await routeCreation(ordinary, publishing); await prepareOpening(opening(workspaces[0], "agent-0"), publishing);
+      assert.equal(patches.length, 0, "creation and opening never publish metadata");
+      const before = await status(publishing, workspaces[0]);
+      assert.deepEqual(patches, [{ "paseo-safehouse.session": { agentId: "agent-0", workspaceId: workspaces[0] } }]);
+      assert.equal(metadata.unrelated, "keep"); await status(publishing, workspaces[0]); assert.equal(patches.length, 1);
+      metadata["paseo-safehouse.session"] = { agentId: "stale", workspaceId: "wrong" };
+      await status(publishing, workspaces[0]); assert.equal(patches.length, 2);
+      delete metadata["paseo-safehouse.session"]; reject = true;
+      assert.deepEqual((await status(publishing, workspaces[0])).agents, before.agents);
+      assert.equal(patches.length, 3); supported = false;
+      assert.deepEqual((await status(publishing, workspaces[0])).agents, before.agents);
+    });
     await fs.writeFile(path.join(workspaces[0], ".safehouse"), `add-dirs-ro=${workspaces[1]}\n`);
     assert.equal((await status(paseo, workspaces[0])).agents[0].changed, true);
     await fs.rm(path.join(workspaces[0], ".safehouse"));

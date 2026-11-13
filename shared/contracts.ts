@@ -110,3 +110,12 @@ export function launchChoice(metadata?: Record<string, unknown>): boolean | unde
     throw new Error("paseo-safehouse.launch must be a boolean. Choose On or Off and retry.");
   return value;
 }
+
+// A mutable UI locator, never launch authority or evidence of sandbox entry.
+export const sessionMetadataKey = "paseo-safehouse.session";
+export function sessionLabel(agent: { preparedAt: string | null; changed: boolean }, policyValid: boolean) {
+  return agent.preparedAt
+    ? !policyValid ? "Safehouse · policy prepared; current policy unavailable"
+      : agent.changed ? "Safehouse · policy changed" : "Safehouse · policy prepared"
+    : "Safehouse · no launch record";
+}
