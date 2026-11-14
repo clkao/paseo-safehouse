@@ -20,7 +20,7 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
   const { clientBundle } = await compiler.compilePlugin({ client: path.resolve("index.client.tsx") });
   assert.ok(clientBundle);
   const plugin = await import("@getpaseo/plugin"), zod = await import("zod");
-  for (const mode of ["old", "old-beta", "new", "mixed", "missing-hook", "missing-select", "rpc-failure"]) {
+  for (const mode of ["old", "old-beta", "new", "missing-action", "mixed", "missing-hook", "missing-select", "rpc-failure"]) {
     const calls: string[] = [], updates: any[] = [], effects: (() => unknown)[] = [];
     const oldClient = mode === "old" || mode === "old-beta";
     const intervals: (() => unknown)[] = [];
@@ -45,8 +45,9 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
     let composerRpc = async (_rpc: { name: string }, _input: any): Promise<any> => available;
     const sdk: any = { useRpc: (rpc: { name: string }) => async (input: any) => composerRpc(rpc, input), openExternalUrl: (url: string) => calls.push(url) };
     if (!oldClient && mode !== "missing-hook") sdk.useComposer = () => composer;
-    const Select = () => null;
-    const modules: Record<string, unknown> = { "@getpaseo/plugin": plugin, zod, react, "react/jsx-runtime": { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }), Fragment: "fragment" }, "react-native": { View: "View", Text: "Text", Pressable: "Pressable" }, "@getpaseo/plugin/client": sdk, "@getpaseo/plugin/client/ui": oldClient || mode === "missing-select" ? {} : { Select, Icon: "Icon" } };
+    const Select = () => null, Action = () => null;
+    const modern = mode === "new" || mode === "missing-action";
+    const modules: Record<string, unknown> = { "@getpaseo/plugin": plugin, zod, react, "react/jsx-runtime": { jsx: (type: unknown, props: unknown) => ({ type, props }), jsxs: (type: unknown, props: unknown) => ({ type, props }), Fragment: "fragment" }, "react-native": { View: "View", Text: "Text", Pressable: "Pressable" }, "@getpaseo/plugin/client": sdk, "@getpaseo/plugin/client/ui": oldClient || mode === "missing-select" ? {} : { Select, Icon: "Icon", ...(mode === "missing-action" ? {} : { Action }) } };
     const factory = vm.runInNewContext(clientBundle, { setInterval: (fn: () => unknown) => { intervals.push(fn); return intervals.length; }, clearInterval() { cleared++; } });
     const exports = factory((name: string) => { assert.ok(name in modules, name); return modules[name]; });
     const registration = () => ({ update: (value: unknown) => updates.push(value), remove: () => calls.push("remove") });
@@ -62,8 +63,8 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
     if (!oldClient) client.addComposerItem = (item: unknown) => { calls.push("composer"); contribution = item; return () => calls.push("remove-composer"); };
     const dispose = exports.default(client);
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(calls, mode === "new" ? ["composer", "pill"] : ["header", "pill"], mode);
-    if (mode === "new") {
+    assert.deepEqual(calls, modern ? ["composer", "pill"] : ["header", "pill"], mode);
+    if (modern) {
       const render = () => { stateIndex = 0; return contribution.Component({ theme: { colors: { foregroundMuted: "gray" } } }); };
       const flushLayout = () => { if (layout) { cleanup?.(); cleanup = layout() || undefined; layout = undefined; } };
       const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -112,11 +113,14 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
       composer.context = "agent"; composer.agent.provider = "safehouse-pi";
       metadata["paseo-safehouse.session"] = { agentId: "existing", workspaceId: "workspace" };
       const poll = async () => { effects.length = 0; render(); const cancel = effects[0]() as () => void; await settle(); return { tree: render(), cancel }; };
-      let current = await poll(); assert.ok(current.tree, JSON.stringify(state)); assert.equal(current.tree.props.accessibilityLabel, "Safehouse · policy prepared");
-      assert.equal(current.tree.props.children.props.name, "Lock");
+      const label = (tree: any) => mode === "missing-action" ? tree.props.accessibilityLabel : tree.props.title;
+      let current = await poll(); assert.ok(current.tree, JSON.stringify(state));
+      assert.equal(current.tree.type, mode === "missing-action" ? "Pressable" : Action);
+      assert.equal(label(current.tree), "Safehouse · policy prepared. Open Safehouse details");
+      assert.equal(mode === "missing-action" ? current.tree.props.children.props.name : current.tree.props.icon, "Lock");
       effects.length = 0; render(); const ready = effects[1]() as () => void;
       assert.equal(pillCount, 0); const secondReady = effects[1]() as () => void;
-      current.tree.props.onPress(); assert.equal(JSON.stringify(navigations.pop()), '["safehouse",{"workspaceId":"workspace"}]');
+      current.tree.props.onPress({}); assert.equal(JSON.stringify(navigations.pop()), '["safehouse",{"workspaceId":"workspace"}]');
       ready(); await settle(); assert.equal(pillCount, 0, "another mounted instance remains ready");
       secondReady(); await settle(); assert.equal(pillCount, 1, "last unmount restores the fallback"); current.cancel();
       for (const [preparedAt, changed, policyValid, expected] of [
@@ -124,7 +128,7 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
         ["now", false, false, "Safehouse · policy prepared; current policy unavailable"],
       ] as const) {
         statusResult = { policyValid, agents: [{ id: "existing", provider: "safehouse-pi", preparedAt, changed }] };
-        current = await poll(); assert.equal(current.tree.props.accessibilityLabel, expected); current.cancel();
+        current = await poll(); assert.equal(label(current.tree), `${expected}. Open Safehouse details`); current.cancel();
       }
       effects.length = 0; render(); const loseReady = effects[1]() as () => void; assert.equal(pillCount, 0);
       lookupFails = true; current = await poll(); assert.equal(current.tree, null); loseReady(); await settle(); assert.equal(pillCount, 1); current.cancel(); lookupFails = false;
@@ -174,6 +178,6 @@ test("real 0.15 compiler loads old/new SDK exports and keeps composer/header exc
       assert.ok(calls.includes("composer")); assert.ok(calls.includes("remove"), "recovery removes the fallback header");
     }
     dispose();
-    assert.equal(calls.filter(x => x === "remove-composer").length, mode === "new" || mode === "rpc-failure" ? 1 : 0);
+    assert.equal(calls.filter(x => x === "remove-composer").length, modern || mode === "rpc-failure" ? 1 : 0);
   }
 });

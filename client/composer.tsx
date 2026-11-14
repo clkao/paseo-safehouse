@@ -15,9 +15,10 @@ type SelectProps = {
   options: readonly { value: Choice; label: string; description?: string }[];
   onValueChange(event: { value: Choice }): Promise<void>;
 };
+type ActionProps = { title: string; icon: "Lock"; onPress(event: object): void };
 // Optional public 0.16 exports; namespace imports also compile and load on 0.15.
 export const composerSdk = sdk as typeof sdk & { useComposer?: () => Composer };
-export const composerUi = ui as typeof ui & { Select?: ComponentType<SelectProps> };
+export const composerUi = ui as typeof ui & { Select?: ComponentType<SelectProps>; Action?: ComponentType<ActionProps> };
 export function supportsComposer(client: { addComposerItem?: unknown }, metadataSupported: boolean) {
   return metadataSupported && typeof client.addComposerItem === "function" &&
     typeof composerSdk.useComposer === "function" && typeof composerUi.Select === "function";
@@ -85,11 +86,16 @@ export function SafehouseComposer({ theme, onReady, openDetails }: {
     return () => { active = false; clearInterval(timer); };
   }, [readAvailability, readStatus, target]);
   useEffect(() => readyId ? onReady(readyId) : undefined, [readyId, onReady]);
-  if (composer.context === "agent") return readyId ?
-    <Pressable accessibilityRole="button" accessibilityLabel={session!.label}
+  if (composer.context === "agent") {
+    if (!readyId) return null;
+    const title = `${session!.label}. Open Safehouse details`;
+    const Action = composerUi.Action;
+    if (Action) return <Action title={title} icon="Lock" onPress={() => openDetails(workspaceId)} />;
+    return <Pressable accessibilityRole="button" accessibilityLabel={title}
       onPress={() => openDetails(workspaceId)} style={{ padding: 6 }}>
       <ui.Icon name="Lock" size={16} color={theme.colors.foregroundMuted} />
-    </Pressable> : null;
+    </Pressable>;
+  }
   const owned = availability?.ownedProviderIds ?? [];
   const fixed = owned.includes(composer.agent.provider ?? "");
   const choice = typeof launchValue === "boolean" ? draftChoice(composer, owned) : undefined;
