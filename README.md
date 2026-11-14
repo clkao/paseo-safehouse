@@ -60,7 +60,10 @@ Saving a policy is optional. Invalid, unreadable, or symlinked policies block Sa
 Repair a reported launch error and retry. Safehouse never retries outside the sandbox.
 
 On Paseo 0.16, the lock inside a Safehouse session's composer opens that session's workspace details.
-Its accessible label describes the prepared policy status. Ordinary sessions show no Safehouse lock.
+Hover over the lock or use keyboard focus to see the prepared policy status and panel action.
+The lock also has a screen-reader label. Ordinary sessions show no Safehouse lock.
+On narrow screens, Paseo places plugin controls in the model menu.
+The agent pill remains visible while the inline control is unavailable.
 Older hosts and unresolved session references retain the agent pill. Reload preserves the conversation and provider.
 The workspace toggle does not change existing agents. Explicit Safehouse providers always use the sandbox.
 
